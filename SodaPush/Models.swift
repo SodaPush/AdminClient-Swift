@@ -300,10 +300,16 @@ struct UserResponse: nonisolated Codable, Sendable { let user: AuthUser }
 struct CreateUserRequest: nonisolated Codable, Sendable { let username: String; let password: String; let role: AppRole }
 
 struct UpdateUserRequest: nonisolated Codable, Sendable {
+    let username: String?
+    let password: String?
+    let currentPassword: String?
     let role: AppRole?
     let disabled: Bool?
 
-    init(role: AppRole? = nil, disabled: Bool? = nil) {
+    init(username: String? = nil, password: String? = nil, currentPassword: String? = nil, role: AppRole? = nil, disabled: Bool? = nil) {
+        self.username = username
+        self.password = password
+        self.currentPassword = currentPassword
         self.role = role
         self.disabled = disabled
     }
@@ -319,5 +325,6 @@ struct AppMember: nonisolated Codable, Identifiable, Equatable, Sendable {
 }
 
 struct AppMembersResponse: nonisolated Codable, Sendable { let members: [AppMember] }
+struct MemberCandidatesResponse: nonisolated Codable, Sendable { let users: [AuthUser] }
 struct AppMemberResponse: nonisolated Codable, Sendable { let member: AppMember }
 struct PutAppMemberRequest: nonisolated Codable, Sendable { let role: AppRole }

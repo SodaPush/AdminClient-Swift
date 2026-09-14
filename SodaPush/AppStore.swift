@@ -234,8 +234,13 @@ final class AppStore: ObservableObject {
 
     func users() async throws -> [AuthUser] { try await authenticated { try await $0.users() } }
     func createUser(_ request: CreateUserRequest) async throws -> AuthUser { try await authenticated { try await $0.createUser(request) } }
-    func updateUser(id: String, request: UpdateUserRequest) async throws -> AuthUser { try await authenticated { try await $0.updateUser(id: id, request: request) } }
+    func updateUser(id: String, request: UpdateUserRequest) async throws -> AuthUser {
+        let user = try await authenticated { try await $0.updateUser(id: id, request: request) }
+        if currentUser?.id == user.id { sessionState = .authenticated(user) }
+        return user
+    }
     func appMembers(appID: String) async throws -> [AppMember] { try await authenticated { try await $0.appMembers(appID: appID) } }
+    func appMemberCandidates(appID: String) async throws -> [AuthUser] { try await authenticated { try await $0.appMemberCandidates(appID: appID) } }
 
     func putAppMember(appID: String, userID: String, role: AppRole) async throws -> AppMember {
         try await authenticated { try await $0.putAppMember(appID: appID, userID: userID, role: role) }

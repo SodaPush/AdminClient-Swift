@@ -215,6 +215,11 @@ actor APIClient {
         return response.members
     }
 
+    func appMemberCandidates(appID: String) async throws -> [AuthUser] {
+        let response: MemberCandidatesResponse = try await send(path: ["v1", "apps", appID, "member-candidates"], method: "GET")
+        return response.users
+    }
+
     func putAppMember(appID: String, userID: String, role: AppRole) async throws -> AppMember {
         let response: AppMemberResponse = try await send(
             path: ["v1", "apps", appID, "members", userID],

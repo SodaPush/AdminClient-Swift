@@ -4,6 +4,7 @@ struct SettingsView: View {
     @EnvironmentObject private var store: AppStore
     @State private var errorMessage: String?
     @State private var pendingRemoval: ServerProfile?
+    @State private var editingUser: AuthUser?
 
     var body: some View {
         NavigationStack {
@@ -12,6 +13,9 @@ struct SettingsView: View {
                     if let user = store.currentUser {
                         LabeledContent("Username", value: user.username)
                         LabeledContent("Role") { StatusBadge(text: user.role.title, tint: user.role.tint) }
+                        Button("Edit Username or Password", systemImage: "person.crop.circle.badge.checkmark") {
+                            editingUser = user
+                        }
                     }
                     Button("Sign Out", role: .destructive, action: store.logout)
                 }
@@ -62,6 +66,9 @@ struct SettingsView: View {
             Button("Cancel", role: .cancel) { pendingRemoval = nil }
         } message: { profile in
             Text("The saved connection and its local session token for \(profile.name) will be removed.")
+        }
+        .sheet(item: $editingUser) { user in
+            EditUserView(user: user, requiresCurrentPassword: user.role != .owner) { _ in }
         }
     }
 

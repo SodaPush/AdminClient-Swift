@@ -4,6 +4,7 @@ struct UserManagementView: View {
     @EnvironmentObject private var store: AppStore
     @State private var state: CollectionLoadState<[AuthUser]> = .idle
     @State private var showingCreate = false
+    @State private var selectedUser: AuthUser?
 
     var body: some View {
         NavigationStack {
@@ -15,7 +16,9 @@ struct UserManagementView: View {
                 case let .loaded(users) where users.isEmpty:
                     ContentUnavailableView("No Users", systemImage: "person.2.slash")
                 case let .loaded(users):
-                    List(users) { user in UserRow(user: user, update: updateUser) }
+                    List(users) { user in
+                        UserRow(user: user, edit: { selectedUser = user }, update: updateUser)
+                    }
                         .refreshable { await load() }
                 case let .failed(message):
                     ContentUnavailableView {
@@ -30,6 +33,9 @@ struct UserManagementView: View {
                 Button { showingCreate = true } label: { Label("New User", systemImage: "person.badge.plus") }
             }
             .sheet(isPresented: $showingCreate) { CreateUserView { await load() } }
+            .sheet(item: $selectedUser) { user in
+                EditUserView(user: user, onUpdated: replaceUser)
+            }
             .task { if case .idle = state { await load() } }
         }
     }
@@ -52,10 +58,17 @@ struct UserManagementView: View {
             } catch { state = .failed(error.localizedDescription) }
         }
     }
+
+    private func replaceUser(_ updated: AuthUser) {
+        guard case var .loaded(users) = state, let index = users.firstIndex(where: { $0.id == updated.id }) else { return }
+        users[index] = updated
+        state = .loaded(users)
+    }
 }
 
 private struct UserRow: View {
     let user: AuthUser
+    let edit: () -> Void
     let update: (AuthUser, AppRole?, Bool?) -> Void
     @State private var copied = false
 
@@ -83,6 +96,9 @@ private struct UserRow: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
+            Button("Edit user", systemImage: "pencil", action: edit)
+                .labelStyle(.iconOnly)
+                .buttonStyle(.borderless)
             if user.role == .owner {
                 StatusBadge(text: user.role.title, tint: user.role.tint)
             } else {
@@ -107,6 +123,92 @@ private struct UserRow: View {
             }
         }
         .padding(.vertical, 5)
+    }
+}
+
+struct EditUserView: View {
+    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var store: AppStore
+
+    let user: AuthUser
+    let requiresCurrentPassword: Bool
+    let onUpdated: (AuthUser) -> Void
+
+    @State private var username: String
+    @State private var currentPassword = ""
+    @State private var password = ""
+    @State private var passwordConfirmation = ""
+    @State private var isSaving = false
+    @State private var errorMessage: String?
+
+    init(user: AuthUser, requiresCurrentPassword: Bool = false, onUpdated: @escaping (AuthUser) -> Void) {
+        self.user = user
+        self.requiresCurrentPassword = requiresCurrentPassword
+        self.onUpdated = onUpdated
+        _username = State(initialValue: user.username)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Account") {
+                    TextField("Username", text: $username)
+                        .autocorrectionDisabled()
+                    LabeledContent("Role", value: user.role.title)
+                }
+                Section("Change Password") {
+                    if requiresCurrentPassword {
+                        SecureField("Current password", text: $currentPassword)
+                    }
+                    SecureField("New password (12+ characters)", text: $password)
+                    SecureField("Confirm new password", text: $passwordConfirmation)
+                    Text("Leave both password fields empty to keep the current password.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                if let errorMessage { Section { InlineErrorView(message: errorMessage) } }
+            }
+            .formStyle(.grouped)
+            .navigationTitle("Edit User")
+            .interactiveDismissDisabled(isSaving)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel", action: dismiss.callAsFunction).disabled(isSaving) }
+                ToolbarItem(placement: .confirmationAction) { Button("Save", action: save).disabled(!canSave || isSaving) }
+            }
+        }
+        .sodaSheetFrame()
+    }
+
+    private var normalizedUsername: String { username.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    private var canSave: Bool {
+        let validUsername = normalizedUsername.range(of: #"^[A-Za-z0-9_.-]{3,64}$"#, options: .regularExpression) != nil
+        let passwordUnchanged = password.isEmpty && passwordConfirmation.isEmpty
+        let validNewPassword = password.count >= 12 && password == passwordConfirmation && (!requiresCurrentPassword || !currentPassword.isEmpty)
+        return validUsername && (normalizedUsername != user.username || !passwordUnchanged) && (passwordUnchanged || validNewPassword)
+    }
+
+    private func save() {
+        Task {
+            isSaving = true
+            errorMessage = nil
+            defer { isSaving = false }
+            do {
+                let updated = try await store.updateUser(
+                    id: user.id,
+                    request: UpdateUserRequest(
+                        username: normalizedUsername == user.username ? nil : normalizedUsername,
+                        password: password.isEmpty ? nil : password,
+                        currentPassword: password.isEmpty || !requiresCurrentPassword ? nil : currentPassword
+                    )
+                )
+                password = ""
+                passwordConfirmation = ""
+                currentPassword = ""
+                onUpdated(updated)
+                dismiss()
+            } catch { errorMessage = error.localizedDescription }
+        }
     }
 }
 
