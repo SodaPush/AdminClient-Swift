@@ -17,18 +17,19 @@ query strings, fragments, and embedded credentials are rejected.
 
 ## Features
 
-- Sign in with a SodaPush account
+- Inspect server health/readiness and complete first-time owner bootstrap
+- Sign in, restore sessions from Keychain, switch between saved servers, and sign out
 - Validate a restored session through `GET /v1/me`
 - Store the bearer token in the system Keychain
-- List applications visible to the account
-- Inspect device installation IDs, platform, environment, and status without exposing raw APNs tokens
-- Submit alert pushes to all active development or production devices
-- Display separate loading, empty, failure, and success states
-- Sign out and remove the active token
-
-Server bootstrap, application creation, APNs credential upload, registration-key
-rotation, and account administration remain API-only operations. Follow the
-Server README for first-time provisioning.
+- Create, rename, enable, and disable applications
+- Inspect device installation IDs, platform, versions, locale, environment, and status without exposing raw APNs tokens
+- Deactivate stale devices with an explicit confirmation
+- Upload and remove APNs `.p8` credentials without persisting private key material
+- Create and revoke SDK registration keys, showing each secret only once with a copy action
+- Compose alert, background, Live Activity, or custom JSON pushes for all devices or a selected device set
+- Browse push history, inspect delivery results, and poll in-flight jobs until completion
+- Manage users and per-app members when the current role allows it
+- Display dedicated loading, empty, failure, retry, and success states
 
 ## Architecture
 
@@ -42,15 +43,35 @@ Server README for first-time provisioning.
 
 The client calls:
 
+- `GET /healthz`
+- `GET /readyz`
+- `GET /v1/bootstrap/status`
+- `POST /v1/bootstrap`
 - `POST /v1/auth/login`
+- `POST /v1/auth/logout`
 - `GET /v1/me`
 - `GET /v1/apps`
+- `POST /v1/apps`
+- `GET /v1/apps/:appID`
+- `PATCH /v1/apps/:appID`
+- `GET|POST /v1/apps/:appID/apns-credentials`
+- `DELETE /v1/apps/:appID/apns-credentials/:credentialID`
+- `GET|POST /v1/apps/:appID/registration-keys`
+- `DELETE /v1/apps/:appID/registration-keys/:keyID`
 - `GET /v1/apps/:appID/devices`
+- `PATCH /v1/apps/:appID/devices/:installationID?environment=<environment>`
+- `GET /v1/apps/:appID/pushes`
 - `POST /v1/apps/:appID/pushes`
+- `GET /v1/apps/:appID/pushes/:jobID`
+- `GET|POST /v1/users` (owner only)
+- `PATCH /v1/users/:userID` (owner only)
+- `GET /v1/apps/:appID/members`
+- `PUT|DELETE /v1/apps/:appID/members/:userID`
 
 Public JSON fields use camelCase. Authenticated requests use
 `Authorization: Bearer <access-token>`. A `401` response clears the active local
-session and returns the UI to sign-in.
+session and returns the UI to sign-in. The UI hides management actions that are
+not available to the current effective app role.
 
 ## Build
 
@@ -92,6 +113,12 @@ on Cloudflare and inline on the current Node.js runtime.
 - `SodaPush/Models.swift`: API and view-domain models
 - `SodaPush/KeychainStore.swift`: bearer-token storage
 - `SodaPush/ContentView.swift`: authentication-state routing
-- `SodaPush/DashboardView.swift`: application navigation
-- `SodaPush/AppDetailView.swift`: device list and push composer
-- `SodaPush/ServerSetupView.swift`: Server sign-in
+- `SodaPush/DashboardView.swift`: workspace navigation and application list
+- `SodaPush/AppDetailView.swift`: app overview, status controls, and section navigation
+- `SodaPush/DevicesView.swift`: device inventory, filtering, deactivation, and targeting
+- `SodaPush/PushesView.swift`: push composer, history, and delivery details
+- `SodaPush/CredentialsView.swift`: APNs credentials and registration-key rotation
+- `SodaPush/UserManagementView.swift`: owner-only account administration
+- `SodaPush/AppMembersView.swift`: per-app member access
+- `SodaPush/ServerSetupView.swift`: server inspection, bootstrap, and sign-in
+- `SodaPush/DesignSystem.swift`: shared status, metric, clipboard, and date UI helpers

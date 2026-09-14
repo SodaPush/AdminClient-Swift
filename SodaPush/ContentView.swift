@@ -4,11 +4,17 @@ struct ContentView: View {
     @EnvironmentObject private var store: AppStore
 
     var body: some View {
-        Group {
+        ZStack {
+            Color.clear
             switch store.sessionState {
             case .restoring:
-                ProgressView("Restoring session…")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                VStack(spacing: 14) {
+                    Image(systemName: "bell.and.waves.left.and.right.fill")
+                        .font(.system(size: 44))
+                        .foregroundStyle(.tint)
+                    ProgressView("Restoring your workspace…")
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             case .signedOut:
                 ServerSetupView()
             case .authenticated:
