@@ -1,6 +1,6 @@
 import SwiftUI
 
-private enum WorkspaceSection: String, CaseIterable, Identifiable {
+private enum WorkspaceSection: String, CaseIterable, Identifiable, Hashable {
     case overview, apps, users, settings
 
     var id: Self { self }
@@ -25,13 +25,16 @@ struct DashboardView: View {
                 Section("Workspace") {
                     sidebarRow(.overview)
                     sidebarRow(.apps)
-                    if store.currentUser?.role.canManageUsers == true { sidebarRow(.users) }
+                    if store.currentUser?.role.canManageUsers == true {
+                        sidebarRow(.users)
+                    }
                 }
                 Section {
                     sidebarRow(.settings)
                 }
             }
             .navigationTitle("SodaPush")
+            .navigationSplitViewColumnWidth(min: 210, ideal: 240, max: 300)
             .safeAreaInset(edge: .bottom) { accountFooter }
         } detail: {
             detailContent
@@ -44,8 +47,9 @@ struct DashboardView: View {
     }
 
     private func sidebarRow(_ section: WorkspaceSection) -> some View {
-        Label(section.title, systemImage: section.systemImage)
-            .tag(section as WorkspaceSection?)
+        NavigationLink(value: section) {
+            Label(section.title, systemImage: section.systemImage)
+        }
     }
 
     @ViewBuilder
@@ -56,7 +60,11 @@ struct DashboardView: View {
         case .apps:
             AppsWorkspaceView()
         case .users:
-            UserManagementView()
+            if store.currentUser?.role.canManageUsers == true {
+                UserManagementView()
+            } else {
+                OverviewView(openApps: { selection = .apps })
+            }
         case .settings:
             SettingsView()
         }
