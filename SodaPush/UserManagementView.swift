@@ -35,7 +35,7 @@ struct UserManagementView: View {
     }
 
     private func load() async {
-        state = .loading
+        if case .loaded = state {} else { state = .loading }
         do { state = .loaded(try await store.users()) }
         catch is CancellationError { return }
         catch { state = .failed(error.localizedDescription) }
@@ -83,24 +83,28 @@ private struct UserRow: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
-            Menu {
-                ForEach(AppRole.allCases) { role in
-                    Button(role.title) { update(user, role, nil) }
-                }
-            } label: {
+            if user.role == .owner {
                 StatusBadge(text: user.role.title, tint: user.role.tint)
-            }
-            Menu {
-                Button(user.disabledAt == nil ? "Disable" : "Enable", role: user.disabledAt == nil ? .destructive : nil) {
-                    update(user, nil, user.disabledAt == nil)
+            } else {
+                Menu {
+                    ForEach([AppRole.admin, .developer, .viewer]) { role in
+                        Button(role.title) { update(user, role, nil) }
+                    }
+                } label: {
+                    StatusBadge(text: user.role.title, tint: user.role.tint)
                 }
-            } label: {
-                Image(systemName: "ellipsis.circle")
-                    .font(.title3)
-                    .foregroundStyle(.secondary)
+                Menu {
+                    Button(user.disabledAt == nil ? "Disable" : "Enable", role: user.disabledAt == nil ? .destructive : nil) {
+                        update(user, nil, user.disabledAt == nil)
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .font(.title3)
+                        .foregroundStyle(.secondary)
+                }
+                .menuStyle(.borderlessButton)
+                .accessibilityLabel("More actions for \(user.username)")
             }
-            .menuStyle(.borderlessButton)
-            .accessibilityLabel("More actions for \(user.username)")
         }
         .padding(.vertical, 5)
     }
@@ -124,7 +128,7 @@ private struct CreateUserView: View {
                     TextField("Username", text: $username).autocorrectionDisabled()
                     SecureField("Password (12+ characters)", text: $password)
                     Picker("Role", selection: $role) {
-                        ForEach(AppRole.allCases) { Text($0.title).tag($0) }
+                        ForEach([AppRole.admin, .developer, .viewer]) { Text($0.title).tag($0) }
                     }
                 }
                 if let errorMessage { Section { InlineErrorView(message: errorMessage) } }
@@ -137,6 +141,7 @@ private struct CreateUserView: View {
                 ToolbarItem(placement: .confirmationAction) { Button("Create", action: create).disabled(!canCreate || isCreating) }
             }
         }
+        .sodaSheetFrame()
     }
 
     private var canCreate: Bool {

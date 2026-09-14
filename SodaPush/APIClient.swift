@@ -140,6 +140,15 @@ actor APIClient {
         try await sendVoid(path: ["v1", "apps", appID, "apns-credentials", credentialID], method: "DELETE")
     }
 
+    func setDefaultAPNsCredential(appID: String, credentialID: String) async throws -> APNsCredential {
+        let response: APNsCredentialResponse = try await send(
+            path: ["v1", "apps", appID, "apns-credentials", credentialID],
+            method: "PATCH",
+            body: SetDefaultCredentialRequest()
+        )
+        return response.credential
+    }
+
     func registrationKeys(appID: String) async throws -> [RegistrationKey] {
         let response: RegistrationKeysResponse = try await send(path: ["v1", "apps", appID, "registration-keys"], method: "GET")
         return response.registrationKeys
@@ -180,6 +189,10 @@ actor APIClient {
 
     func push(appID: String, pushID: String) async throws -> PushDetailResponse {
         try await send(path: ["v1", "apps", appID, "pushes", pushID], method: "GET")
+    }
+
+    func deletePush(appID: String, pushID: String) async throws {
+        try await sendVoid(path: ["v1", "apps", appID, "pushes", pushID], method: "DELETE")
     }
 
     func users() async throws -> [AuthUser] {

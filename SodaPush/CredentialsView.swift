@@ -24,21 +24,36 @@ struct CredentialsView: View {
                 ProgressView("Loading credentials…").frame(maxWidth: .infinity, maxHeight: .infinity)
             case let .loaded(bundle):
                 List {
+                    if app.role.canManageCredentials {
+                        Section {
+                            Button {
+                                showingAPNsUpload = true
+                            } label: {
+                                Label("Add APNs Signing Key (.p8)", systemImage: "key.horizontal.fill")
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.large)
+                        }
+                    }
                     Section {
                         if bundle.credentials.isEmpty {
                             Label("No APNs credential configured", systemImage: "exclamationmark.triangle")
                                 .foregroundStyle(.orange)
                         } else {
                             ForEach(bundle.credentials) { credential in
-                                APNsCredentialRow(credential: credential, canManage: app.role.canManageCredentials) {
-                                    pendingCredential = credential
-                                }
+                                APNsCredentialRow(
+                                    credential: credential,
+                                    canManage: app.role.canManageCredentials,
+                                    makeDefault: { makeDefault(credential) },
+                                    delete: { pendingCredential = credential }
+                                )
                             }
                         }
                     } header: {
                         Text("APNs Credentials")
                     } footer: {
-                        Text("The most recently updated credential is used for delivery. Private key material is never returned by the server.")
+                        Text("Each environment has a default credential, and a different key can be selected for an individual push. Private key material is never returned by the server.")
                     }
 
                     Section {
@@ -69,13 +84,10 @@ struct CredentialsView: View {
         }
         .toolbar {
             if app.role.canManageCredentials {
-                ToolbarItemGroup {
-                    Button { showingAPNsUpload = true } label: { Label("Upload APNs Key", systemImage: "square.and.arrow.up") }
-                    Button(action: createKey) {
-                        Label(isCreatingKey ? "Creating…" : "New Registration Key", systemImage: "key.badge.plus")
-                    }
-                    .disabled(isCreatingKey)
+                Button(action: createKey) {
+                    Label(isCreatingKey ? "Creating…" : "New Registration Key", systemImage: "key.badge.plus")
                 }
+                .disabled(isCreatingKey)
             }
         }
         .sheet(isPresented: $showingAPNsUpload) {
@@ -106,7 +118,7 @@ struct CredentialsView: View {
     }
 
     private func load() async {
-        state = .loading
+        if case .loaded = state {} else { state = .loading }
         do {
             async let credentials = store.apnsCredentials(appID: app.id)
             async let keys = store.registrationKeys(appID: app.id)
@@ -136,6 +148,15 @@ struct CredentialsView: View {
         }
     }
 
+    private func makeDefault(_ credential: APNsCredential) {
+        Task {
+            do {
+                _ = try await store.setDefaultAPNsCredential(appID: app.id, credentialID: credential.id)
+                await load()
+            } catch { state = .failed(error.localizedDescription) }
+        }
+    }
+
     private func revokeKey(_ key: RegistrationKey) {
         pendingKey = nil
         Task {
@@ -150,6 +171,7 @@ struct CredentialsView: View {
 private struct APNsCredentialRow: View {
     let credential: APNsCredential
     let canManage: Bool
+    let makeDefault: () -> Void
     let delete: () -> Void
 
     var body: some View {
@@ -161,10 +183,16 @@ private struct APNsCredentialRow: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
+            StatusBadge(text: credential.environment.title, tint: StatusBadge.color(for: credential.environment.rawValue))
+            if credential.isDefault {
+                StatusBadge(text: "Default", tint: .green)
+            }
             if canManage {
-                Button("Delete", systemImage: "trash", role: .destructive, action: delete)
-                    .labelStyle(.iconOnly)
-                    .buttonStyle(.borderless)
+                Menu {
+                    if !credential.isDefault { Button("Make Default", systemImage: "checkmark.circle", action: makeDefault) }
+                    Button("Delete", systemImage: "trash", role: .destructive, action: delete)
+                } label: { Image(systemName: "ellipsis.circle") }
+                .menuStyle(.borderlessButton)
             }
         }
         .padding(.vertical, 5)
@@ -202,6 +230,8 @@ private struct APNsUploadView: View {
     @State private var teamID = ""
     @State private var keyID = ""
     @State private var privateKey = ""
+    @State private var environment: PushEnvironment = .production
+    @State private var makeDefault = true
     @State private var isImporting = false
     @State private var isUploading = false
     @State private var errorMessage: String?
@@ -213,8 +243,15 @@ private struct APNsUploadView: View {
                     TextField("Team ID", text: $teamID).font(.body.monospaced()).autocorrectionDisabled()
                     TextField("Key ID", text: $keyID).font(.body.monospaced()).autocorrectionDisabled()
                 }
+                Section("Delivery Environment") {
+                    Picker("Environment", selection: $environment) {
+                        ForEach(PushEnvironment.allCases) { Text($0.title).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    Toggle("Use as the default for this environment", isOn: $makeDefault)
+                }
                 Section("Private Key (.p8)") {
-                    Button("Choose .p8 File", systemImage: "doc.badge.plus") { isImporting = true }
+                    Button("Choose .p8 File", systemImage: "key.horizontal") { isImporting = true }
                     TextEditor(text: $privateKey)
                         .font(.caption.monospaced())
                         .frame(minHeight: 140)
@@ -234,6 +271,7 @@ private struct APNsUploadView: View {
                 importFile(result)
             }
         }
+        .sodaSheetFrame(minHeight: 620)
     }
 
     private var canUpload: Bool {
@@ -261,7 +299,9 @@ private struct APNsUploadView: View {
                     appID: app.id,
                     teamID: teamID.trimmingCharacters(in: .whitespacesAndNewlines),
                     keyID: keyID.trimmingCharacters(in: .whitespacesAndNewlines),
-                    p8: privateKey
+                    p8: privateKey,
+                    environment: environment,
+                    makeDefault: makeDefault
                 )
                 privateKey = ""
                 await onUploaded()
@@ -296,5 +336,6 @@ private struct RegistrationSecretView: View {
             .interactiveDismissDisabled(!copied)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done", action: dismiss.callAsFunction).disabled(!copied) } }
         }
+        .sodaSheetFrame()
     }
 }

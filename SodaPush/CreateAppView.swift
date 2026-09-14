@@ -70,6 +70,7 @@ struct CreateAppView: View {
                 }
             }
         }
+        .sodaSheetFrame()
     }
 
     private var canCreate: Bool {

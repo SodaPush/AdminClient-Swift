@@ -7,6 +7,7 @@ struct PushesView: View {
     @State private var state: CollectionLoadState<[PushJob]> = .idle
     @State private var showingComposer = false
     @State private var selectedPush: PushJob?
+    @State private var pendingDeletion: PushJob?
 
     var body: some View {
         Group {
@@ -23,8 +24,15 @@ struct PushesView: View {
                 }
             case let .loaded(pushes):
                 List(pushes) { push in
-                    Button { selectedPush = push } label: { PushJobRow(push: push) }
-                        .buttonStyle(.plain)
+                    HStack {
+                        Button { selectedPush = push } label: { PushJobRow(push: push) }
+                            .buttonStyle(.plain)
+                        if app.role.canSendPushes && push.isTerminal {
+                            Button("Delete push record", systemImage: "trash", role: .destructive) { pendingDeletion = push }
+                                .labelStyle(.iconOnly)
+                                .buttonStyle(.borderless)
+                        }
+                    }
                 }
                 .refreshable { await load() }
             case let .failed(message):
@@ -45,11 +53,17 @@ struct PushesView: View {
         }
         .sheet(isPresented: $showingComposer) { PushComposerView(app: app) { await load() } }
         .sheet(item: $selectedPush) { push in PushJobDetailView(app: app, initialPush: push) }
+        .alert("Delete Push Record?", isPresented: deletionPresented, presenting: pendingDeletion) { push in
+            Button("Delete", role: .destructive) { delete(push) }
+            Button("Cancel", role: .cancel) { pendingDeletion = nil }
+        } message: { _ in
+            Text("The push record and all of its delivery records will be permanently deleted.")
+        }
         .task(id: app.id) { await load() }
     }
 
     private func load() async {
-        state = .loading
+        if case .loaded = state {} else { state = .loading }
         do { state = .loaded(try await store.pushes(appID: app.id)) }
         catch is CancellationError { return }
         catch { state = .failed(error.localizedDescription) }
@@ -58,6 +72,24 @@ struct PushesView: View {
     private var canSendPushes: Bool {
         app.role.canSendPushes && app.disabledAt == nil
     }
+
+    private var deletionPresented: Binding<Bool> {
+        Binding(get: { pendingDeletion != nil }, set: { if !$0 { pendingDeletion = nil } })
+    }
+
+    private func delete(_ push: PushJob) {
+        pendingDeletion = nil
+        Task {
+            do {
+                try await store.deletePush(appID: app.id, pushID: push.id)
+                await load()
+            } catch { state = .failed(error.localizedDescription) }
+        }
+    }
+}
+
+private extension PushJob {
+    var isTerminal: Bool { ["completed", "partial", "failed"].contains(status) }
 }
 
 private struct PushJobRow: View {
@@ -72,7 +104,7 @@ private struct PushJobRow: View {
             VStack(alignment: .leading, spacing: 5) {
                 HStack {
                     Text(push.pushType.rawValue.capitalized).font(.headline)
-                    StatusBadge(text: push.environment.rawValue.capitalized, tint: StatusBadge.color(for: push.environment.rawValue))
+                    StatusBadge(text: push.environment.title, tint: StatusBadge.color(for: push.environment.rawValue))
                 }
                 Text(push.id).font(.caption.monospaced()).foregroundStyle(.secondary).lineLimit(1)
                 Text(SodaDate.formatted(push.createdAt)).font(.caption).foregroundStyle(.secondary)
@@ -106,9 +138,12 @@ struct PushComposerView: View {
     @State private var message = ""
     @State private var customPayload = false
     @State private var payloadText = ""
-    @State private var sendToAll: Bool
+    @State private var targetMode: PushTargetMode
     @State private var selectedInstallationIDs: Set<String>
     @State private var devices: [DeviceSummary] = []
+    @State private var credentials: [APNsCredential] = []
+    @State private var selectedCredentialID: String?
+    @State private var targetValues = ""
     @State private var isSending = false
     @State private var errorMessage: String?
 
@@ -116,7 +151,7 @@ struct PushComposerView: View {
         self.app = app
         self.initialInstallationIDs = initialInstallationIDs
         self.onSent = onSent
-        _sendToAll = State(initialValue: initialInstallationIDs.isEmpty)
+        _targetMode = State(initialValue: initialInstallationIDs.isEmpty ? .all : .devices)
         _selectedInstallationIDs = State(initialValue: Set(initialInstallationIDs))
     }
 
@@ -125,16 +160,29 @@ struct PushComposerView: View {
             Form {
                 Section("Delivery") {
                     Picker("Environment", selection: $environment) {
-                        ForEach(PushEnvironment.allCases) { Text($0.rawValue.capitalized).tag($0) }
+                        ForEach(PushEnvironment.allCases) { Text($0.title).tag($0) }
                     }
                     .pickerStyle(.segmented)
                     Picker("Push Type", selection: $pushType) {
                         ForEach(PushType.allCases) { Text(typeTitle($0)).tag($0) }
                     }
-                    Toggle("Send to all active devices", isOn: $sendToAll)
+                    Picker("APNs Key", selection: $selectedCredentialID) {
+                        ForEach(availableCredentials) { credential in
+                            Text("\(credential.keyID)\(credential.isDefault ? " (Default)" : "")")
+                                .tag(Optional(credential.id))
+                        }
+                    }
+                    if availableCredentials.isEmpty {
+                        Label("Add an APNs key for \(environment.title) before sending.", systemImage: "exclamationmark.triangle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
+                    Picker("Audience", selection: $targetMode) {
+                        ForEach(PushTargetMode.allCases) { Text($0.title).tag($0) }
+                    }
                 }
 
-                if !sendToAll {
+                if targetMode == .devices {
                     Section("Devices") {
                         if availableDevices.isEmpty {
                             Text("No active \(environment.rawValue) devices available.").foregroundStyle(.secondary)
@@ -154,6 +202,16 @@ struct PushComposerView: View {
                                 .buttonStyle(.plain)
                             }
                         }
+                    }
+                }
+
+                if targetMode.usesValues {
+                    Section(targetMode.title) {
+                        TextField(targetMode.prompt, text: $targetValues, axis: .vertical)
+                            .lineLimit(2...5)
+                        Text("Separate multiple values with commas.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                 }
 
@@ -193,23 +251,35 @@ struct PushComposerView: View {
                     .disabled(isSending || !canSend)
                 }
             }
-            .task { await loadDevices() }
+            .task { await loadResources() }
             .onChange(of: pushType) { _, newValue in preparePayload(for: newValue) }
             .onChange(of: environment) { _, _ in
                 let available = Set(availableDevices.map(\.installationID))
                 selectedInstallationIDs.formIntersection(available)
+                selectDefaultCredential()
             }
         }
+        .sodaSheetFrame(minHeight: 680)
     }
 
     private var availableDevices: [DeviceSummary] {
         devices.filter { $0.environment == environment && $0.status == "active" }
     }
 
+    private var availableCredentials: [APNsCredential] {
+        credentials.filter { $0.environment == environment }
+    }
+
+    private var parsedTargetValues: [String] {
+        targetValues.split(separator: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+    }
+
     private var payloadByteCount: Int { payloadText.data(using: .utf8)?.count ?? 0 }
 
     private var canSend: Bool {
-        if !sendToAll && selectedInstallationIDs.isEmpty { return false }
+        if selectedCredentialID == nil { return false }
+        if targetMode == .devices && selectedInstallationIDs.isEmpty { return false }
+        if targetMode.usesValues && parsedTargetValues.isEmpty { return false }
         if pushType == .alert && !customPayload { return !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
         if customPayload || pushType == .liveactivity { return !payloadText.isEmpty && payloadByteCount <= 4096 }
         return true
@@ -234,14 +304,35 @@ struct PushComposerView: View {
         }
     }
 
-    private func loadDevices() async {
+    private func loadResources() async {
         do {
-            devices = try await store.devices(appID: app.id)
+            async let loadedDevices = store.devices(appID: app.id)
+            async let loadedCredentials = store.apnsCredentials(appID: app.id)
+            devices = try await loadedDevices
+            credentials = try await loadedCredentials
             if let selected = devices.first(where: { initialInstallationIDs.contains($0.installationID) }) {
                 environment = selected.environment
             }
+            selectDefaultCredential()
         } catch is CancellationError { return }
         catch { errorMessage = error.localizedDescription }
+    }
+
+    private func selectDefaultCredential() {
+        let candidates = availableCredentials
+        if !candidates.contains(where: { $0.id == selectedCredentialID }) {
+            selectedCredentialID = candidates.first(where: \.isDefault)?.id ?? candidates.first?.id
+        }
+    }
+
+    private func buildTarget() -> PushTarget {
+        switch targetMode {
+        case .all: PushTarget(all: true)
+        case .devices: PushTarget(installationIds: Array(selectedInstallationIDs).sorted())
+        case .tags: PushTarget(tags: parsedTargetValues)
+        case .languages: PushTarget(languages: parsedTargetValues)
+        case .userIDs: PushTarget(userIDs: parsedTargetValues)
+        }
     }
 
     private func buildPayload() throws -> JSONValue {
@@ -280,8 +371,7 @@ struct PushComposerView: View {
                 let payload = try buildPayload()
                 let encoded = try JSONEncoder().encode(payload)
                 guard encoded.count <= 4096 else { throw ComposerError.payloadTooLarge }
-                let target = sendToAll ? PushTarget(all: true) : PushTarget(installationIds: Array(selectedInstallationIDs).sorted())
-                _ = try await store.sendPush(appID: app.id, request: PushRequest(environment: environment, pushType: pushType, target: target, payload: payload))
+                _ = try await store.sendPush(appID: app.id, request: PushRequest(environment: environment, credentialID: selectedCredentialID, pushType: pushType, target: buildTarget(), payload: payload))
                 await onSent()
                 dismiss()
             } catch { errorMessage = error.localizedDescription }
@@ -295,6 +385,30 @@ struct PushComposerView: View {
             case .invalidPayload: "Enter a valid JSON object for the APNs payload."
             case .payloadTooLarge: "The APNs payload exceeds 4096 bytes."
             }
+        }
+    }
+}
+
+private enum PushTargetMode: String, CaseIterable, Identifiable {
+    case all, devices, tags, languages, userIDs
+
+    var id: Self { self }
+    var title: String {
+        switch self {
+        case .all: "All Active Devices"
+        case .devices: "Selected Devices"
+        case .tags: "Tags"
+        case .languages: "Device Languages"
+        case .userIDs: "Business User IDs"
+        }
+    }
+    var usesValues: Bool { self == .tags || self == .languages || self == .userIDs }
+    var prompt: String {
+        switch self {
+        case .tags: "beta, paid"
+        case .languages: "en, zh-Hans"
+        case .userIDs: "customer-42, customer-84"
+        case .all, .devices: ""
         }
     }
 }
@@ -315,7 +429,7 @@ private struct PushJobDetailView: View {
                     let push = detail?.push ?? initialPush
                     HStack {
                         StatusBadge(text: push.status.capitalized, tint: StatusBadge.color(for: push.status))
-                        StatusBadge(text: push.environment.rawValue.capitalized, tint: StatusBadge.color(for: push.environment.rawValue))
+                        StatusBadge(text: push.environment.title, tint: StatusBadge.color(for: push.environment.rawValue))
                         Spacer()
                         Text(push.pushType.rawValue.capitalized).foregroundStyle(.secondary)
                     }
@@ -346,6 +460,7 @@ private struct PushJobDetailView: View {
             }
             .task { await pollUntilComplete() }
         }
+        .sodaSheetFrame(minHeight: 620)
     }
 
     private var push: PushJob { detail?.push ?? initialPush }

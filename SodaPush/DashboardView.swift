@@ -1,72 +1,32 @@
 import SwiftUI
 
-private enum WorkspaceSection: String, CaseIterable, Identifiable, Hashable {
-    case overview, apps, users, settings
-
-    var id: Self { self }
-    var title: String { rawValue.capitalized }
-    var systemImage: String {
-        switch self {
-        case .overview: "square.grid.2x2"
-        case .apps: "app.badge"
-        case .users: "person.2"
-        case .settings: "gearshape"
-        }
-    }
-}
-
 struct DashboardView: View {
     @EnvironmentObject private var store: AppStore
-    @State private var selection: WorkspaceSection? = .overview
 
     var body: some View {
         NavigationSplitView {
-            List(selection: $selection) {
+            List {
                 Section("Workspace") {
-                    sidebarRow(.overview)
-                    sidebarRow(.apps)
+                    NavigationLink { OverviewView() } label: { Label("Overview", systemImage: "square.grid.2x2") }
+                    NavigationLink { AppsWorkspaceView() } label: { Label("Applications", systemImage: "app.badge") }
                     if store.currentUser?.role.canManageUsers == true {
-                        sidebarRow(.users)
+                        NavigationLink { UserManagementView() } label: { Label("Users", systemImage: "person.2") }
                     }
                 }
                 Section {
-                    sidebarRow(.settings)
+                    NavigationLink { SettingsView() } label: { Label("Settings", systemImage: "gearshape") }
                 }
             }
             .navigationTitle("SodaPush")
             .navigationSplitViewColumnWidth(min: 210, ideal: 240, max: 300)
             .safeAreaInset(edge: .bottom) { accountFooter }
         } detail: {
-            detailContent
+            OverviewView()
         }
         .alert("Account Error", isPresented: sessionErrorPresented) {
             Button("OK", role: .cancel) { store.sessionError = nil }
         } message: {
             Text(store.sessionError ?? "")
-        }
-    }
-
-    private func sidebarRow(_ section: WorkspaceSection) -> some View {
-        NavigationLink(value: section) {
-            Label(section.title, systemImage: section.systemImage)
-        }
-    }
-
-    @ViewBuilder
-    private var detailContent: some View {
-        switch selection ?? .overview {
-        case .overview:
-            OverviewView(openApps: { selection = .apps })
-        case .apps:
-            AppsWorkspaceView()
-        case .users:
-            if store.currentUser?.role.canManageUsers == true {
-                UserManagementView()
-            } else {
-                OverviewView(openApps: { selection = .apps })
-            }
-        case .settings:
-            SettingsView()
         }
     }
 
@@ -95,7 +55,6 @@ struct DashboardView: View {
 
 private struct OverviewView: View {
     @EnvironmentObject private var store: AppStore
-    let openApps: () -> Void
 
     var body: some View {
         ScrollView {
@@ -119,8 +78,12 @@ private struct OverviewView: View {
                             .font(.headline)
                         Text("Open an app to configure APNs, rotate registration keys, inspect devices, and send notifications.")
                             .foregroundStyle(.secondary)
-                        Button("Open Applications", action: openApps)
-                            .buttonStyle(.borderedProminent)
+                        NavigationLink {
+                            AppsWorkspaceView()
+                        } label: {
+                            Label("Open Applications", systemImage: "arrow.right.circle.fill")
+                        }
+                        .buttonStyle(.borderedProminent)
                     }
                     .padding(8)
                     .frame(maxWidth: .infinity, alignment: .leading)

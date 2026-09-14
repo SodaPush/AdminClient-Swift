@@ -3,7 +3,7 @@ import SwiftUI
 private enum DeviceEnvironmentFilter: String, CaseIterable, Identifiable {
     case all, development, production
     var id: Self { self }
-    var title: String { rawValue.capitalized }
+    var title: String { self == .development ? "Sandbox" : rawValue.capitalized }
 }
 
 struct DevicesView: View {
@@ -97,15 +97,16 @@ struct DevicesView: View {
             let matchesEnvironment = environment == .all || device.environment.rawValue == environment.rawValue
             let matchesStatus = showInactive || device.status == "active"
             let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-            let matchesSearch = query.isEmpty || [device.installationID, device.platform, device.appVersion, device.appBuild, device.locale]
+            let matchesSearch = query.isEmpty || ([device.installationID, device.platform, device.appVersion, device.appBuild, device.locale, device.language, device.userID]
                 .compactMap { $0 }
+                + (device.tags ?? []))
                 .contains { $0.localizedCaseInsensitiveContains(query) }
             return matchesEnvironment && matchesStatus && matchesSearch
         }
     }
 
     private func load() async {
-        state = .loading
+        if case .loaded = state {} else { state = .loading }
         do {
             let devices = try await store.devices(appID: app.id)
             state = .loaded(devices)
@@ -156,13 +157,18 @@ private struct DeviceRow: View {
                     .font(.callout.monospaced())
                     .textSelection(.enabled)
                 HStack(spacing: 6) {
-                    StatusBadge(text: device.environment.rawValue.capitalized, tint: StatusBadge.color(for: device.environment.rawValue))
+                    StatusBadge(text: device.environment.title, tint: StatusBadge.color(for: device.environment.rawValue))
                     StatusBadge(text: device.status.capitalized, tint: StatusBadge.color(for: device.status))
                     Text(device.platform).font(.caption).foregroundStyle(.secondary)
                 }
                 Text(metadata)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                if let tags = device.tags, !tags.isEmpty {
+                    Text(tags.map { "#\($0)" }.joined(separator: "  "))
+                        .font(.caption2)
+                        .foregroundStyle(.tint)
+                }
             }
             Spacer()
             if let deactivate {
@@ -184,7 +190,7 @@ private struct DeviceRow: View {
         case let (nil, build?): versionText = "Build \(build)"
         case (nil, nil): versionText = "Unknown version"
         }
-        return [versionText, device.locale, device.timeZone, "Updated \(SodaDate.formatted(device.updatedAt))"]
+        return [versionText, device.language, device.locale, device.userID.map { "User \($0)" }, device.timeZone, "Updated \(SodaDate.formatted(device.updatedAt))"]
             .compactMap { $0 }
             .joined(separator: " · ")
     }

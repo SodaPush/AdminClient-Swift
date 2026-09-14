@@ -150,7 +150,7 @@ final class AppStore: ObservableObject {
         let session = sessionGeneration
         appsReloadGeneration &+= 1
         let reload = appsReloadGeneration
-        appsState = .loading
+        if case .loaded = appsState {} else { appsState = .loading }
         do {
             let apps = try await client.apps()
             guard session == sessionGeneration, reload == appsReloadGeneration else { return }
@@ -182,10 +182,14 @@ final class AppStore: ObservableObject {
         try await authenticated { try await $0.apnsCredentials(appID: appID) }
     }
 
-    func createAPNsCredential(appID: String, teamID: String, keyID: String, p8: String) async throws -> APNsCredential {
+    func createAPNsCredential(appID: String, teamID: String, keyID: String, p8: String, environment: PushEnvironment, makeDefault: Bool) async throws -> APNsCredential {
         try await authenticated {
-            try await $0.createAPNsCredential(appID: appID, request: APNsCredentialRequest(teamID: teamID, keyID: keyID, p8: p8))
+            try await $0.createAPNsCredential(appID: appID, request: APNsCredentialRequest(teamID: teamID, keyID: keyID, p8: p8, environment: environment, makeDefault: makeDefault))
         }
+    }
+
+    func setDefaultAPNsCredential(appID: String, credentialID: String) async throws -> APNsCredential {
+        try await authenticated { try await $0.setDefaultAPNsCredential(appID: appID, credentialID: credentialID) }
     }
 
     func deleteAPNsCredential(appID: String, credentialID: String) async throws {
@@ -222,6 +226,10 @@ final class AppStore: ObservableObject {
 
     func push(appID: String, pushID: String) async throws -> PushDetailResponse {
         try await authenticated { try await $0.push(appID: appID, pushID: pushID) }
+    }
+
+    func deletePush(appID: String, pushID: String) async throws {
+        try await authenticated { try await $0.deletePush(appID: appID, pushID: pushID) }
     }
 
     func users() async throws -> [AuthUser] { try await authenticated { try await $0.users() } }
