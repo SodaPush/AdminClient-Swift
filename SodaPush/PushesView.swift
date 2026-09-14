@@ -143,7 +143,7 @@ struct PushComposerView: View {
     @State private var devices: [DeviceSummary] = []
     @State private var credentials: [APNsCredential] = []
     @State private var selectedCredentialID: String?
-    @State private var targetValues = ""
+    @State private var selectedTargetValues: Set<String> = []
     @State private var isSending = false
     @State private var errorMessage: String?
 
@@ -207,11 +207,17 @@ struct PushComposerView: View {
 
                 if targetMode.usesValues {
                     Section(targetMode.title) {
-                        TextField(targetMode.prompt, text: $targetValues, axis: .vertical)
-                            .lineLimit(2...5)
-                        Text("Separate multiple values with commas.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        if availableTargetValues.isEmpty {
+                            Text("No reported values are available for this audience.")
+                                .foregroundStyle(.secondary)
+                        } else {
+                            ForEach(availableTargetValues, id: \.self) { value in
+                                Button { toggleTargetValue(value) } label: {
+                                    Label(value, systemImage: selectedTargetValues.contains(value) ? "checkmark.circle.fill" : "circle")
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
                     }
                 }
 
@@ -257,7 +263,9 @@ struct PushComposerView: View {
                 let available = Set(availableDevices.map(\.installationID))
                 selectedInstallationIDs.formIntersection(available)
                 selectDefaultCredential()
+                selectedTargetValues.removeAll()
             }
+            .onChange(of: targetMode) { _, _ in selectedTargetValues.removeAll() }
         }
         .sodaSheetFrame(minHeight: 680)
     }
@@ -270,8 +278,15 @@ struct PushComposerView: View {
         credentials.filter { $0.environment == environment }
     }
 
-    private var parsedTargetValues: [String] {
-        targetValues.split(separator: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+    private var availableTargetValues: [String] {
+        let values: [String]
+        switch targetMode {
+        case .tags: values = availableDevices.flatMap { $0.tags ?? [] }
+        case .languages: values = availableDevices.compactMap(\.language)
+        case .userIDs: values = availableDevices.compactMap(\.userID)
+        case .all, .devices: values = []
+        }
+        return Array(Set(values)).sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
     }
 
     private var payloadByteCount: Int { payloadText.data(using: .utf8)?.count ?? 0 }
@@ -279,7 +294,7 @@ struct PushComposerView: View {
     private var canSend: Bool {
         if selectedCredentialID == nil { return false }
         if targetMode == .devices && selectedInstallationIDs.isEmpty { return false }
-        if targetMode.usesValues && parsedTargetValues.isEmpty { return false }
+        if targetMode.usesValues && selectedTargetValues.isEmpty { return false }
         if pushType == .alert && !customPayload { return !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
         if customPayload || pushType == .liveactivity { return !payloadText.isEmpty && payloadByteCount <= 4096 }
         return true
@@ -295,6 +310,10 @@ struct PushComposerView: View {
 
     private func toggle(_ id: String) {
         if !selectedInstallationIDs.insert(id).inserted { selectedInstallationIDs.remove(id) }
+    }
+
+    private func toggleTargetValue(_ value: String) {
+        if !selectedTargetValues.insert(value).inserted { selectedTargetValues.remove(value) }
     }
 
     private func preparePayload(for type: PushType) {
@@ -329,9 +348,9 @@ struct PushComposerView: View {
         switch targetMode {
         case .all: PushTarget(all: true)
         case .devices: PushTarget(installationIds: Array(selectedInstallationIDs).sorted())
-        case .tags: PushTarget(tags: parsedTargetValues)
-        case .languages: PushTarget(languages: parsedTargetValues)
-        case .userIDs: PushTarget(userIDs: parsedTargetValues)
+        case .tags: PushTarget(tags: selectedTargetValues.sorted())
+        case .languages: PushTarget(languages: selectedTargetValues.sorted())
+        case .userIDs: PushTarget(userIDs: selectedTargetValues.sorted())
         }
     }
 
@@ -403,14 +422,6 @@ private enum PushTargetMode: String, CaseIterable, Identifiable {
         }
     }
     var usesValues: Bool { self == .tags || self == .languages || self == .userIDs }
-    var prompt: String {
-        switch self {
-        case .tags: "beta, paid"
-        case .languages: "en, zh-Hans"
-        case .userIDs: "customer-42, customer-84"
-        case .all, .devices: ""
-        }
-    }
 }
 
 private struct PushJobDetailView: View {

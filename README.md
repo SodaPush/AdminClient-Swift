@@ -11,11 +11,11 @@ SodaPush Admin is the native SwiftUI operator app for [SodaPush Server](https://
 ## Features
 
 - Inspect health/readiness, bootstrap the single owner, sign in, and restore Keychain-backed sessions.
-- Create and manage applications, users, and per-app roles.
+- Create users, edit personal account details, rename accounts, reset passwords, and manage per-app roles with selection-based member assignment.
 - Upload multiple APNs `.p8` keys, assign each to sandbox or production, and choose a default for each environment.
 - Inspect devices with language, locale, custom tags, business user ID, environment, version, and status.
 - Send alert, background, Live Activity, or custom JSON pushes.
-- Target all devices, selected installations, tags, device languages, or business user IDs.
+- Target all devices or select from reported installations, tags, device languages, and business user IDs.
 - Select the APNs key per push, with automatic environment-specific defaults.
 - Inspect delivery results and delete completed push records.
 

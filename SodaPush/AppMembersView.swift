@@ -115,8 +115,10 @@ private struct AddMemberView: View {
     let app: AppSummary
     let onAdded: () async -> Void
 
-    @State private var userID = ""
+    @State private var candidates: [AuthUser] = []
+    @State private var selectedUserID: String?
     @State private var role: AppRole = .viewer
+    @State private var isLoading = true
     @State private var isAdding = false
     @State private var errorMessage: String?
 
@@ -124,13 +126,20 @@ private struct AddMemberView: View {
         NavigationStack {
             Form {
                 Section("Member") {
-                    TextField("User ID", text: $userID).font(.body.monospaced()).autocorrectionDisabled()
+                    Picker("User", selection: $selectedUserID) {
+                        Text("Select a user").tag(nil as String?)
+                        ForEach(candidates) { user in
+                            Text("\(user.username) · \(user.role.title)").tag(Optional(user.id))
+                        }
+                    }
+                    if isLoading { ProgressView("Loading users…") }
+                    else if candidates.isEmpty { Text("No users are available to add.").foregroundStyle(.secondary) }
                     Picker("App Role", selection: $role) {
                         ForEach([AppRole.admin, .developer, .viewer]) { Text($0.title).tag($0) }
                     }
                 }
                 Section {
-                    Text("Create users from the Users screen, then copy their ID here. Owners already have access to every app.")
+                    Text("Create accounts from the Users screen first. Owners already have access to every app and are not listed here.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 if let errorMessage { Section { InlineErrorView(message: errorMessage) } }
@@ -140,19 +149,29 @@ private struct AddMemberView: View {
             .interactiveDismissDisabled(isAdding)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel", action: dismiss.callAsFunction).disabled(isAdding) }
-                ToolbarItem(placement: .confirmationAction) { Button("Add", action: add).disabled(userID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isAdding) }
+                ToolbarItem(placement: .confirmationAction) { Button("Add", action: add).disabled(selectedUserID == nil || isAdding || isLoading) }
             }
         }
         .sodaSheetFrame()
+        .task { await loadCandidates() }
+    }
+
+    private func loadCandidates() async {
+        isLoading = true
+        defer { isLoading = false }
+        do { candidates = try await store.appMemberCandidates(appID: app.id) }
+        catch is CancellationError { return }
+        catch { errorMessage = error.localizedDescription }
     }
 
     private func add() {
+        guard let selectedUserID else { return }
         Task {
             isAdding = true
             errorMessage = nil
             defer { isAdding = false }
             do {
-                _ = try await store.putAppMember(appID: app.id, userID: userID.trimmingCharacters(in: .whitespacesAndNewlines), role: role)
+                _ = try await store.putAppMember(appID: app.id, userID: selectedUserID, role: role)
                 await onAdded()
                 dismiss()
             } catch { errorMessage = error.localizedDescription }
