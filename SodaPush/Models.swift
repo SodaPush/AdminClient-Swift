@@ -98,15 +98,19 @@ struct APNsCredential: nonisolated Codable, Identifiable, Equatable, Sendable {
     let id: String
     let teamID: String
     let keyID: String
+    let environment: PushEnvironment
+    let isDefault: Bool
     let createdAt: String
     let updatedAt: String
 
-    private enum CodingKeys: String, CodingKey { case id, teamID, keyID, createdAt, updatedAt }
+    private enum CodingKeys: String, CodingKey { case id, teamID, keyID, environment, isDefault, createdAt, updatedAt }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         teamID = try container.decode(String.self, forKey: .teamID)
         keyID = try container.decode(String.self, forKey: .keyID)
+        environment = try container.decodeIfPresent(PushEnvironment.self, forKey: .environment) ?? .production
+        isDefault = try container.decodeIfPresent(Bool.self, forKey: .isDefault) ?? false
         updatedAt = try container.decode(String.self, forKey: .updatedAt)
         id = try container.decodeIfPresent(String.self, forKey: .id) ?? "legacy:\(keyID)"
         createdAt = try container.decodeIfPresent(String.self, forKey: .createdAt) ?? updatedAt
@@ -117,13 +121,22 @@ struct APNsCredential: nonisolated Codable, Identifiable, Equatable, Sendable {
         try container.encode(id, forKey: .id)
         try container.encode(teamID, forKey: .teamID)
         try container.encode(keyID, forKey: .keyID)
+        try container.encode(environment, forKey: .environment)
+        try container.encode(isDefault, forKey: .isDefault)
         try container.encode(createdAt, forKey: .createdAt)
         try container.encode(updatedAt, forKey: .updatedAt)
     }
 }
 
 struct APNsCredentialsResponse: nonisolated Codable, Sendable { let credentials: [APNsCredential] }
-struct APNsCredentialRequest: nonisolated Codable, Sendable { let teamID: String; let keyID: String; let p8: String }
+struct APNsCredentialRequest: nonisolated Codable, Sendable {
+    let teamID: String
+    let keyID: String
+    let p8: String
+    let environment: PushEnvironment
+    let makeDefault: Bool
+}
+struct SetDefaultCredentialRequest: nonisolated Encodable, Sendable { let isDefault = true }
 
 struct APNsCredentialResponse: nonisolated Decodable, Sendable {
     let credential: APNsCredential
@@ -139,6 +152,7 @@ struct APNsCredentialResponse: nonisolated Decodable, Sendable {
 enum PushEnvironment: String, nonisolated Codable, CaseIterable, Identifiable, Sendable {
     case development, production
     var id: Self { self }
+    var title: String { self == .development ? "Sandbox" : "Production" }
 }
 
 struct DeviceSummary: nonisolated Codable, Identifiable, Equatable, Sendable {
@@ -149,7 +163,10 @@ struct DeviceSummary: nonisolated Codable, Identifiable, Equatable, Sendable {
     let appVersion: String?
     let appBuild: String?
     let locale: String?
+    let language: String?
     let timeZone: String?
+    let userID: String?
+    let tags: [String]?
     let status: String
     let createdAt: String
     let updatedAt: String
@@ -198,26 +215,34 @@ enum PushType: String, nonisolated Codable, CaseIterable, Identifiable, Sendable
 struct PushTarget: nonisolated Codable, Equatable, Sendable {
     let all: Bool?
     let installationIds: [String]?
+    let tags: [String]?
+    let languages: [String]?
+    let userIDs: [String]?
 
-    init(all: Bool) { self.all = all; installationIds = nil }
-    init(installationIds: [String]) { all = nil; self.installationIds = installationIds }
+    init(all: Bool) { self.all = all; installationIds = nil; tags = nil; languages = nil; userIDs = nil }
+    init(installationIds: [String]) { all = nil; self.installationIds = installationIds; tags = nil; languages = nil; userIDs = nil }
+    init(tags: [String]) { all = nil; installationIds = nil; self.tags = tags; languages = nil; userIDs = nil }
+    init(languages: [String]) { all = nil; installationIds = nil; tags = nil; self.languages = languages; userIDs = nil }
+    init(userIDs: [String]) { all = nil; installationIds = nil; tags = nil; languages = nil; self.userIDs = userIDs }
 }
 
 struct PushRequest: nonisolated Codable, Sendable {
     let environment: PushEnvironment
+    let credentialID: String?
     let pushType: PushType
     let target: PushTarget
     let payload: JSONValue
 
-    init(environment: PushEnvironment, pushType: PushType, target: PushTarget, payload: JSONValue) {
+    init(environment: PushEnvironment, credentialID: String? = nil, pushType: PushType, target: PushTarget, payload: JSONValue) {
         self.environment = environment
+        self.credentialID = credentialID
         self.pushType = pushType
         self.target = target
         self.payload = payload
     }
 
-    init(environment: PushEnvironment, pushType: PushType, target: PushTarget, payload: APNsPayload) {
-        self.init(environment: environment, pushType: pushType, target: target, payload: payload.jsonValue)
+    init(environment: PushEnvironment, credentialID: String? = nil, pushType: PushType, target: PushTarget, payload: APNsPayload) {
+        self.init(environment: environment, credentialID: credentialID, pushType: pushType, target: target, payload: payload.jsonValue)
     }
 }
 
@@ -243,6 +268,7 @@ struct PushJob: nonisolated Codable, Identifiable, Equatable, Sendable {
     let id: String
     let appID: String
     let environment: PushEnvironment
+    let credentialID: String?
     let pushType: PushType
     let target: PushTarget
     let payload: JSONValue

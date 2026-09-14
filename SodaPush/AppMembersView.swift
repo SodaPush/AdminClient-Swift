@@ -48,7 +48,7 @@ struct AppMembersView: View {
     }
 
     private func load() async {
-        state = .loading
+        if case .loaded = state {} else { state = .loading }
         do { state = .loaded(try await store.appMembers(appID: app.id)) }
         catch is CancellationError { return }
         catch { state = .failed(error.localizedDescription) }
@@ -143,6 +143,7 @@ private struct AddMemberView: View {
                 ToolbarItem(placement: .confirmationAction) { Button("Add", action: add).disabled(userID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isAdding) }
             }
         }
+        .sodaSheetFrame()
     }
 
     private func add() {

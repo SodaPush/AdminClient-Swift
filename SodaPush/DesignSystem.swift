@@ -8,8 +8,25 @@ import UIKit
 
 enum SodaDate {
     static func formatted(_ value: String?, dateOnly: Bool = false) -> String {
-        guard let value, let date = ISO8601DateFormatter().date(from: value) else { return "—" }
+        guard let value, let date = parsed(value) else { return "—" }
         return date.formatted(date: dateOnly ? .abbreviated : .abbreviated, time: dateOnly ? .omitted : .shortened)
+    }
+
+    private static func parsed(_ value: String) -> Date? {
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return fractional.date(from: value) ?? ISO8601DateFormatter().date(from: value)
+    }
+}
+
+extension View {
+    @ViewBuilder
+    func sodaSheetFrame(minHeight: CGFloat = 560) -> some View {
+        #if os(macOS)
+        frame(minWidth: 540, minHeight: minHeight)
+        #else
+        self
+        #endif
     }
 }
 
