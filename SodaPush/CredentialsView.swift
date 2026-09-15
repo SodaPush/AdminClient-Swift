@@ -90,6 +90,7 @@ struct CredentialsView: View {
                 Button(action: createKey) {
                     Label(isCreatingKey ? "Creating…" : "New Registration Key", systemImage: "key.badge.plus")
                 }
+                .labelStyle(.titleAndIcon)
                 .disabled(isCreatingKey)
             }
         }

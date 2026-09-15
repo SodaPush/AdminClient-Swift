@@ -55,7 +55,7 @@ struct SettingsView: View {
                             .accessibilityHidden(true)
                         VStack(alignment: .leading, spacing: 3) {
                             Text("SodaPush").font(.headline)
-                            Text("Native Admin Client · 1.0")
+                            Text("Native Admin Client")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
