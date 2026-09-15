@@ -215,9 +215,7 @@ struct ServerSetupView: View {
 private struct WelcomeHeader: View {
     var body: some View {
         VStack(spacing: 12) {
-            Image(systemName: "bell.and.waves.left.and.right.fill")
-                .font(.system(size: 48, weight: .semibold))
-                .foregroundStyle(.tint)
+            SodaBrandIcon(size: 92)
                 .accessibilityHidden(true)
             Text("SodaPush")
                 .font(.largeTitle.bold())

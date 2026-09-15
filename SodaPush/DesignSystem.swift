@@ -41,6 +41,44 @@ enum SodaClipboard {
     }
 }
 
+struct SodaBrandIcon: View {
+    var size: CGFloat = 72
+
+    var body: some View {
+        Group {
+            #if os(macOS)
+            Image(nsImage: appIcon)
+                .resizable()
+                .scaledToFit()
+            #else
+            if let appIcon = UIImage(named: "AppIcon") ?? UIImage(named: "AppIcon60x60") {
+                Image(uiImage: appIcon)
+                    .resizable()
+                    .scaledToFit()
+            } else {
+                Image(systemName: "bell.and.waves.left.and.right.fill")
+                    .resizable()
+                    .scaledToFit()
+                    .foregroundStyle(.tint)
+            }
+            #endif
+        }
+        .frame(width: size, height: size)
+        .clipShape(RoundedRectangle(cornerRadius: size * 0.22, style: .continuous))
+        .accessibilityLabel("SodaPush app icon")
+    }
+
+    #if os(macOS)
+    private var appIcon: NSImage {
+        if let url = Bundle.main.url(forResource: "AppIcon", withExtension: "icns"),
+           let icon = NSImage(contentsOfFile: url.path) {
+            return icon
+        }
+        return NSApplication.shared.applicationIconImage
+    }
+    #endif
+}
+
 struct StatusBadge: View {
     let text: String
     var tint: Color = .secondary
