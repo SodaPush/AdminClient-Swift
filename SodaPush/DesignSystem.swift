@@ -74,10 +74,12 @@ struct MetricTile: View {
     var tint: Color = .accentColor
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 14) {
             Image(systemName: systemImage)
-                .font(.title2)
+                .font(.title3.weight(.semibold))
                 .foregroundStyle(tint)
+                .frame(width: 40, height: 40)
+                .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
             Text(value)
                 .font(.title.bold())
                 .contentTransition(.numericText())
@@ -86,8 +88,9 @@ struct MetricTile: View {
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(18)
-        .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .padding(20)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(Color.primary.opacity(0.06)))
         .accessibilityElement(children: .combine)
     }
 }

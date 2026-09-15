@@ -28,25 +28,20 @@ struct AppDetailView: View {
     var body: some View {
         VStack(spacing: 0) {
             AppHeader(app: currentApp)
+            SectionPicker(selection: $section, app: currentApp)
             Divider()
-            TabView(selection: $section) {
-                AppOverviewSection(app: currentApp, onUpdated: { currentApp = $0 })
-                    .tabItem { Label(AppDetailSection.overview.title, systemImage: AppDetailSection.overview.systemImage) }
-                    .tag(AppDetailSection.overview)
-                DevicesView(app: currentApp)
-                    .tabItem { Label(AppDetailSection.devices.title, systemImage: AppDetailSection.devices.systemImage) }
-                    .tag(AppDetailSection.devices)
-                PushesView(app: currentApp)
-                    .tabItem { Label(AppDetailSection.pushes.title, systemImage: AppDetailSection.pushes.systemImage) }
-                    .tag(AppDetailSection.pushes)
-                if currentApp.role.canManageCredentials {
+            Group {
+                if section == .overview {
+                    AppOverviewSection(app: currentApp, onUpdated: { currentApp = $0 })
+                } else if section == .devices {
+                    DevicesView(app: currentApp)
+                } else if section == .pushes {
+                    PushesView(app: currentApp)
+                } else if section == .credentials && currentApp.role.canManageCredentials {
                     CredentialsView(app: currentApp)
-                        .tabItem { Label(AppDetailSection.credentials.title, systemImage: AppDetailSection.credentials.systemImage) }
-                        .tag(AppDetailSection.credentials)
+                } else {
+                    AppMembersView(app: currentApp)
                 }
-                AppMembersView(app: currentApp)
-                    .tabItem { Label(AppDetailSection.access.title, systemImage: AppDetailSection.access.systemImage) }
-                    .tag(AppDetailSection.access)
             }
         }
         .navigationTitle(currentApp.name)
@@ -64,6 +59,37 @@ struct AppDetailView: View {
         do { currentApp = try await store.app(id: currentApp.id) }
         catch is CancellationError { return }
         catch { errorMessage = error.localizedDescription }
+    }
+}
+
+private struct SectionPicker: View {
+    @Binding var selection: AppDetailSection
+    let app: AppSummary
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(visibleSections) { item in
+                    Button {
+                        withAnimation(.snappy) { selection = item }
+                    } label: {
+                        Label(item.title, systemImage: item.systemImage)
+                            .font(.subheadline.weight(selection == item ? .semibold : .regular))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(selection == item ? Color.accentColor.opacity(0.14) : Color.clear, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(selection == item ? Color.accentColor : .secondary)
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 12)
+        }
+    }
+
+    private var visibleSections: [AppDetailSection] {
+        AppDetailSection.allCases.filter { $0 != .credentials || app.role.canManageCredentials }
     }
 }
 

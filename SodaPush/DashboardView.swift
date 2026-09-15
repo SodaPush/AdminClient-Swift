@@ -17,6 +17,7 @@ struct DashboardView: View {
                     NavigationLink { SettingsView() } label: { Label("Settings", systemImage: "gearshape") }
                 }
             }
+            .listStyle(.sidebar)
             .navigationTitle("SodaPush")
             .navigationSplitViewColumnWidth(min: 210, ideal: 240, max: 300)
             .safeAreaInset(edge: .bottom) { accountFooter }
@@ -59,15 +60,30 @@ private struct OverviewView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Good to see you, \(store.currentUser?.username ?? "operator")")
+                VStack(alignment: .leading, spacing: 12) {
+                    Label("YOUR APNS CONTROL PLANE", systemImage: "cloud.fill")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.tint)
+                    Text("Your push infrastructure, your rules.")
                         .font(.largeTitle.bold())
-                    Text(store.activeProfile?.baseURL.host ?? "Your SodaPush workspace")
+                    Text("Manage Apple notifications from the backend you deployed. Credentials, devices, and delivery records stay in your account.")
+                        .font(.subheadline)
                         .foregroundStyle(.secondary)
+                    if let host = store.activeProfile?.baseURL.host {
+                        Label(host, systemImage: "network")
+                            .font(.caption.monospaced())
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(26)
+                .background {
+                    RoundedRectangle(cornerRadius: 22)
+                        .fill(LinearGradient(colors: [Color.accentColor.opacity(0.16), Color.accentColor.opacity(0.03)], startPoint: .topLeading, endPoint: .bottomTrailing))
                 }
 
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 170), spacing: 14)], spacing: 14) {
-                    MetricTile(title: "Applications", value: "\(apps.count)", systemImage: "app.badge")
+                    MetricTile(title: "Applications", value: "\(apps.count)", systemImage: "square.stack.3d.up")
                     MetricTile(title: "Active", value: "\(apps.filter { $0.disabledAt == nil }.count)", systemImage: "checkmark.circle", tint: .green)
                     MetricTile(title: "Disabled", value: "\(apps.filter { $0.disabledAt != nil }.count)", systemImage: "pause.circle", tint: .orange)
                 }
@@ -109,12 +125,11 @@ private struct AppsWorkspaceView: View {
 
     var body: some View {
         NavigationStack {
-            Group {
-                switch store.appsState {
-                case .idle, .loading:
-                    List(0..<4, id: \.self) { _ in AppPlaceholderRow() }
+            List {
+                if isLoading {
+                    ForEach(0..<4, id: \.self) { _ in AppPlaceholderRow() }
                         .redacted(reason: .placeholder)
-                case let .loaded(apps) where filtered(apps).isEmpty:
+                } else if case let .loaded(apps) = store.appsState, filtered(apps).isEmpty {
                     ContentUnavailableView {
                         Label(searchText.isEmpty ? "No Applications" : "No Matches", systemImage: "app.dashed")
                     } description: {
@@ -124,12 +139,11 @@ private struct AppsWorkspaceView: View {
                             Button("Create Application") { showingCreateApp = true }
                         }
                     }
-                case let .loaded(apps):
-                    List(filtered(apps)) { app in
+                } else if case let .loaded(apps) = store.appsState {
+                    ForEach(filtered(apps)) { app in
                         NavigationLink(value: app) { AppRow(app: app) }
                     }
-                    .refreshable { await store.reloadApps() }
-                case let .failed(message):
+                } else if case let .failed(message) = store.appsState {
                     ContentUnavailableView {
                         Label("Could Not Load Applications", systemImage: "wifi.exclamationmark")
                     } description: { Text(message) } actions: {
@@ -137,6 +151,7 @@ private struct AppsWorkspaceView: View {
                     }
                 }
             }
+            .refreshable { await store.reloadApps() }
             .navigationTitle("Applications")
             .searchable(text: $searchText, prompt: "Name or bundle ID")
             .navigationDestination(for: AppSummary.self) { app in AppDetailView(app: app) }
@@ -144,7 +159,8 @@ private struct AppsWorkspaceView: View {
                 ToolbarItemGroup {
                     Button { Task { await store.reloadApps() } } label: { Label("Refresh", systemImage: "arrow.clockwise") }
                     if store.currentUser?.role.canManageApps == true {
-                        Button { showingCreateApp = true } label: { Label("Create Application", systemImage: "plus") }
+                        Button { showingCreateApp = true } label: { Label("New Application", systemImage: "plus.circle.fill") }
+                            .buttonStyle(.borderedProminent)
                     }
                 }
             }
@@ -156,6 +172,12 @@ private struct AppsWorkspaceView: View {
         guard !searchText.isEmpty else { return apps }
         return apps.filter { $0.name.localizedCaseInsensitiveContains(searchText) || $0.bundleID.localizedCaseInsensitiveContains(searchText) }
     }
+
+    private var isLoading: Bool {
+        if case .idle = store.appsState { return true }
+        if case .loading = store.appsState { return true }
+        return false
+    }
 }
 
 private struct AppRow: View {
@@ -163,10 +185,11 @@ private struct AppRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: app.disabledAt == nil ? "app.badge.fill" : "app.badge")
+            Image(systemName: app.disabledAt == nil ? "square.stack.3d.up.fill" : "square.stack.3d.up")
                 .font(.title2)
                 .foregroundStyle(app.disabledAt == nil ? Color.accentColor : .secondary)
-                .frame(width: 34)
+                .frame(width: 44, height: 44)
+                .background(Color.accentColor.opacity(0.11), in: RoundedRectangle(cornerRadius: 12))
             VStack(alignment: .leading, spacing: 3) {
                 Text(app.name).font(.headline)
                 Text(app.bundleID).font(.caption.monospaced()).foregroundStyle(.secondary)
@@ -175,7 +198,7 @@ private struct AppRow: View {
             StatusBadge(text: app.disabledAt == nil ? "Active" : "Disabled", tint: app.disabledAt == nil ? .green : .red)
             StatusBadge(text: app.role.title, tint: app.role.tint)
         }
-        .padding(.vertical, 5)
+        .padding(.vertical, 8)
         .accessibilityElement(children: .combine)
     }
 }

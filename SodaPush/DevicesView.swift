@@ -21,14 +21,13 @@ struct DevicesView: View {
     var body: some View {
         VStack(spacing: 0) {
             filters
-            Group {
-                switch state {
-                case .idle, .loading:
-                    ProgressView("Loading devices…").frame(maxWidth: .infinity, maxHeight: .infinity)
-                case let .loaded(devices) where filtered(devices).isEmpty:
+            List {
+                if isLoading {
+                    ProgressView("Loading devices…")
+                } else if case let .loaded(devices) = state, filtered(devices).isEmpty {
                     ContentUnavailableView("No Devices", systemImage: "iphone.slash", description: Text("No devices match the current filters."))
-                case let .loaded(devices):
-                    List(filtered(devices)) { device in
+                } else if case let .loaded(devices) = state {
+                    ForEach(filtered(devices)) { device in
                         DeviceRow(
                             device: device,
                             isSelected: selectedIDs.contains(device.id),
@@ -37,8 +36,7 @@ struct DevicesView: View {
                             deactivate: app.role.canManageApps && device.status == "active" ? { pendingDeactivation = device } : nil
                         )
                     }
-                    .refreshable { await load() }
-                case let .failed(message):
+                } else if case let .failed(message) = state {
                     ContentUnavailableView {
                         Label("Could Not Load Devices", systemImage: "wifi.exclamationmark")
                     } description: { Text(message) } actions: {
@@ -46,6 +44,7 @@ struct DevicesView: View {
                     }
                 }
             }
+            .refreshable { await load() }
         }
         .toolbar {
             ToolbarItemGroup {
@@ -81,6 +80,12 @@ struct DevicesView: View {
         .padding(.vertical, 12)
         .background(.bar)
         .searchable(text: $searchText, prompt: "Installation ID, version, or locale")
+    }
+
+    private var isLoading: Bool {
+        if case .idle = state { return true }
+        if case .loading = state { return true }
+        return false
     }
 
     private var deactivationPresented: Binding<Bool> {

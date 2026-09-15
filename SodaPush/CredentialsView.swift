@@ -18,24 +18,27 @@ struct CredentialsView: View {
     @State private var pendingKey: RegistrationKey?
 
     var body: some View {
-        Group {
-            switch state {
-            case .idle, .loading:
-                ProgressView("Loading credentials…").frame(maxWidth: .infinity, maxHeight: .infinity)
-            case let .loaded(bundle):
-                List {
-                    if app.role.canManageCredentials {
-                        Section {
-                            Button {
-                                showingAPNsUpload = true
-                            } label: {
-                                Label("Add APNs Signing Key (.p8)", systemImage: "key.horizontal.fill")
-                                    .frame(maxWidth: .infinity)
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .controlSize(.large)
-                        }
+        VStack(spacing: 0) {
+            if app.role.canManageCredentials {
+                HStack {
+                    Label("APNs signing keys", systemImage: "lock.shield")
+                        .font(.headline)
+                    Spacer()
+                    Button {
+                        showingAPNsUpload = true
+                    } label: {
+                        Label("Upload .p8 Key", systemImage: "square.and.arrow.up")
                     }
+                    .buttonStyle(.borderedProminent)
+                }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 12)
+                .background(.bar)
+            }
+            List {
+                if isLoading {
+                    ProgressView("Loading credentials…")
+                } else if case let .loaded(bundle) = state {
                     Section {
                         if bundle.credentials.isEmpty {
                             Label("No APNs credential configured", systemImage: "exclamationmark.triangle")
@@ -72,15 +75,15 @@ struct CredentialsView: View {
                     } footer: {
                         Text("Applications use these keys to sign device registration requests.")
                     }
-                }
-                .refreshable { await load() }
-            case let .failed(message):
-                ContentUnavailableView {
-                    Label("Could Not Load Credentials", systemImage: "key.slash")
-                } description: { Text(message) } actions: {
-                    Button("Try Again") { Task { await load() } }
+                } else if case let .failed(message) = state {
+                    ContentUnavailableView {
+                        Label("Could Not Load Credentials", systemImage: "key.slash")
+                    } description: { Text(message) } actions: {
+                        Button("Try Again") { Task { await load() } }
+                    }
                 }
             }
+            .refreshable { await load() }
         }
         .toolbar {
             if app.role.canManageCredentials {
@@ -115,6 +118,12 @@ struct CredentialsView: View {
 
     private var keyRevocationPresented: Binding<Bool> {
         Binding(get: { pendingKey != nil }, set: { if !$0 { pendingKey = nil } })
+    }
+
+    private var isLoading: Bool {
+        if case .idle = state { return true }
+        if case .loading = state { return true }
+        return false
     }
 
     private func load() async {

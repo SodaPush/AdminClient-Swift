@@ -9,18 +9,16 @@ struct AppMembersView: View {
     @State private var pendingRemoval: AppMember?
 
     var body: some View {
-        Group {
-            switch state {
-            case .idle, .loading:
-                ProgressView("Loading members…").frame(maxWidth: .infinity, maxHeight: .infinity)
-            case let .loaded(members) where members.isEmpty:
+        List {
+            if isLoading {
+                ProgressView("Loading members…")
+            } else if case let .loaded(members) = state, members.isEmpty {
                 ContentUnavailableView("No Members", systemImage: "person.2.slash")
-            case let .loaded(members):
-                List(members) { member in
+            } else if case let .loaded(members) = state {
+                ForEach(members) { member in
                     MemberRow(member: member, canManage: app.role.canManageMembers, updateRole: { update(member, role: $0) }, remove: { pendingRemoval = member })
                 }
-                .refreshable { await load() }
-            case let .failed(message):
+            } else if case let .failed(message) = state {
                 ContentUnavailableView {
                     Label("Could Not Load Members", systemImage: "person.2.slash")
                 } description: { Text(message) } actions: {
@@ -28,6 +26,7 @@ struct AppMembersView: View {
                 }
             }
         }
+        .refreshable { await load() }
         .toolbar {
             if app.role.canManageMembers {
                 Button { showingAddMember = true } label: { Label("Add Member", systemImage: "person.badge.plus") }
@@ -47,6 +46,12 @@ struct AppMembersView: View {
         Binding(get: { pendingRemoval != nil }, set: { if !$0 { pendingRemoval = nil } })
     }
 
+    private var isLoading: Bool {
+        if case .idle = state { return true }
+        if case .loading = state { return true }
+        return false
+    }
+
     private func load() async {
         if case .loaded = state {} else { state = .loading }
         do { state = .loaded(try await store.appMembers(appID: app.id)) }
@@ -57,7 +62,7 @@ struct AppMembersView: View {
     private func update(_ member: AppMember, role: AppRole) {
         Task {
             do {
-                let updated = try await store.putAppMember(appID: app.id, userID: member.userID, role: role)
+                let updated = try await store.saveAppMember(appID: app.id, userID: member.userID, role: role)
                 if case var .loaded(members) = state, let index = members.firstIndex(where: { $0.id == updated.id }) {
                     members[index] = updated
                     state = .loaded(members)
@@ -171,7 +176,7 @@ private struct AddMemberView: View {
             errorMessage = nil
             defer { isAdding = false }
             do {
-                _ = try await store.putAppMember(appID: app.id, userID: selectedUserID, role: role)
+                _ = try await store.saveAppMember(appID: app.id, userID: selectedUserID, role: role)
                 await onAdded()
                 dismiss()
             } catch { errorMessage = error.localizedDescription }

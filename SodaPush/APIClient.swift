@@ -122,7 +122,7 @@ actor APIClient {
     }
 
     func updateApp(id: String, request: UpdateAppRequest) async throws -> AppSummary {
-        let response: AppResponse = try await send(path: ["v1", "apps", id], method: "PATCH", body: request)
+        let response: AppResponse = try await send(path: ["v1", "apps", id, "update"], method: "POST", body: request)
         return response.app
     }
 
@@ -137,13 +137,13 @@ actor APIClient {
     }
 
     func deleteAPNsCredential(appID: String, credentialID: String) async throws {
-        try await sendVoid(path: ["v1", "apps", appID, "apns-credentials", credentialID], method: "DELETE")
+        try await sendVoid(path: ["v1", "apps", appID, "apns-credentials", credentialID, "delete"], method: "POST")
     }
 
     func setDefaultAPNsCredential(appID: String, credentialID: String) async throws -> APNsCredential {
         let response: APNsCredentialResponse = try await send(
-            path: ["v1", "apps", appID, "apns-credentials", credentialID],
-            method: "PATCH",
+            path: ["v1", "apps", appID, "apns-credentials", credentialID, "default"],
+            method: "POST",
             body: SetDefaultCredentialRequest()
         )
         return response.credential
@@ -160,7 +160,7 @@ actor APIClient {
     }
 
     func deleteRegistrationKey(appID: String, keyID: String) async throws {
-        try await sendVoid(path: ["v1", "apps", appID, "registration-keys", keyID], method: "DELETE")
+        try await sendVoid(path: ["v1", "apps", appID, "registration-keys", keyID, "revoke"], method: "POST")
     }
 
     func devices(appID: String) async throws -> [DeviceSummary] {
@@ -170,8 +170,8 @@ actor APIClient {
 
     func deactivateDevice(appID: String, installationID: String, environment: PushEnvironment) async throws -> DeviceSummary {
         let response: DeviceResponse = try await send(
-            path: ["v1", "apps", appID, "devices", installationID],
-            method: "PATCH",
+            path: ["v1", "apps", appID, "devices", installationID, "deactivate"],
+            method: "POST",
             query: [URLQueryItem(name: "environment", value: environment.rawValue)],
             body: UpdateDeviceRequest.inactive
         )
@@ -192,7 +192,7 @@ actor APIClient {
     }
 
     func deletePush(appID: String, pushID: String) async throws {
-        try await sendVoid(path: ["v1", "apps", appID, "pushes", pushID], method: "DELETE")
+        try await sendVoid(path: ["v1", "apps", appID, "pushes", pushID, "delete"], method: "POST")
     }
 
     func users() async throws -> [AuthUser] {
@@ -206,7 +206,7 @@ actor APIClient {
     }
 
     func updateUser(id: String, request: UpdateUserRequest) async throws -> AuthUser {
-        let response: UserResponse = try await send(path: ["v1", "users", id], method: "PATCH", body: request)
+        let response: UserResponse = try await send(path: ["v1", "users", id, "update"], method: "POST", body: request)
         return response.user
     }
 
@@ -220,17 +220,17 @@ actor APIClient {
         return response.users
     }
 
-    func putAppMember(appID: String, userID: String, role: AppRole) async throws -> AppMember {
+    func saveAppMember(appID: String, userID: String, role: AppRole) async throws -> AppMember {
         let response: AppMemberResponse = try await send(
             path: ["v1", "apps", appID, "members", userID],
-            method: "PUT",
-            body: PutAppMemberRequest(role: role)
+            method: "POST",
+            body: SaveAppMemberRequest(role: role)
         )
         return response.member
     }
 
     func deleteAppMember(appID: String, userID: String) async throws {
-        try await sendVoid(path: ["v1", "apps", appID, "members", userID], method: "DELETE")
+        try await sendVoid(path: ["v1", "apps", appID, "members", userID, "remove"], method: "POST")
     }
 
     private func send<Response: Decodable & Sendable>(

@@ -242,8 +242,8 @@ final class AppStore: ObservableObject {
     func appMembers(appID: String) async throws -> [AppMember] { try await authenticated { try await $0.appMembers(appID: appID) } }
     func appMemberCandidates(appID: String) async throws -> [AuthUser] { try await authenticated { try await $0.appMemberCandidates(appID: appID) } }
 
-    func putAppMember(appID: String, userID: String, role: AppRole) async throws -> AppMember {
-        try await authenticated { try await $0.putAppMember(appID: appID, userID: userID, role: role) }
+    func saveAppMember(appID: String, userID: String, role: AppRole) async throws -> AppMember {
+        try await authenticated { try await $0.saveAppMember(appID: appID, userID: userID, role: role) }
     }
 
     func deleteAppMember(appID: String, userID: String) async throws {

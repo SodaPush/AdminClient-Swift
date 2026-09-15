@@ -1,6 +1,6 @@
 # SodaPush Admin for Swift
 
-SodaPush Admin is the native SwiftUI operator app for [SodaPush Server](https://github.com/SodaPush/Server). Applications receiving notifications integrate [SodaPush SDK](https://github.com/SodaPush/SDK-Swift).
+SodaPush Admin is the native SwiftUI console for an APNs backend you deploy in your own Cloudflare account. [SodaPush Server](https://github.com/SodaPush/Server) runs on Workers, D1, and Queues; within Cloudflare's free-plan limits, small deployments can cost nothing to host. You retain control of APNs credentials, device records, targeting data, and delivery history. Receiving apps integrate [SodaPush SDK](https://github.com/SodaPush/SDK-Swift).
 
 ## Requirements
 
@@ -50,6 +50,8 @@ The server has exactly one immutable owner account. Additional users can be admi
 - `AppStore` owns main-actor session and workspace state.
 - Actor-isolated `APIClient` uses typed `Codable` requests and `async/await` networking.
 - SwiftUI views keep lifecycle-bound work in `.task` and `.refreshable`.
-- Navigation uses native destinations and tabs rather than view-switching routers.
+- Navigation uses native destinations; application detail retains its original horizontal section picker.
+
+All management calls use only HTTP GET or POST. POST is used for updates, revocations, deactivations, and deletion of completed records.
 
 The client expects public JSON fields in camelCase and authenticates management requests with a bearer token. A `401` clears the active local session.
