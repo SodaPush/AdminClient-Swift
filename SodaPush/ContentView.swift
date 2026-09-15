@@ -6,8 +6,7 @@ struct ContentView: View {
     var body: some View {
         ZStack {
             Color.clear
-            switch store.sessionState {
-            case .restoring:
+            if case .restoring = store.sessionState {
                 VStack(spacing: 14) {
                     Image(systemName: "bell.and.waves.left.and.right.fill")
                         .font(.system(size: 44))
@@ -15,9 +14,9 @@ struct ContentView: View {
                     ProgressView("Restoring your workspace…")
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            case .signedOut:
+            } else if case .signedOut = store.sessionState {
                 ServerSetupView()
-            case .authenticated:
+            } else {
                 DashboardView()
             }
         }

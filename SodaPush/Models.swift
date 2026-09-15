@@ -327,4 +327,4 @@ struct AppMember: nonisolated Codable, Identifiable, Equatable, Sendable {
 struct AppMembersResponse: nonisolated Codable, Sendable { let members: [AppMember] }
 struct MemberCandidatesResponse: nonisolated Codable, Sendable { let users: [AuthUser] }
 struct AppMemberResponse: nonisolated Codable, Sendable { let member: AppMember }
-struct PutAppMemberRequest: nonisolated Codable, Sendable { let role: AppRole }
+struct SaveAppMemberRequest: nonisolated Codable, Sendable { let role: AppRole }

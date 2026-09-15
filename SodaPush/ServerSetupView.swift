@@ -221,7 +221,7 @@ private struct WelcomeHeader: View {
                 .accessibilityHidden(true)
             Text("SodaPush")
                 .font(.largeTitle.bold())
-            Text("Connect to your server and manage apps, devices, credentials, and delivery activity.")
+            Text("Connect to the APNs backend in your own Cloudflare account. Your credentials, devices, and delivery history stay under your control.")
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
         }

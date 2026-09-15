@@ -10,11 +10,10 @@ struct PushesView: View {
     @State private var pendingDeletion: PushJob?
 
     var body: some View {
-        Group {
-            switch state {
-            case .idle, .loading:
-                ProgressView("Loading push history…").frame(maxWidth: .infinity, maxHeight: .infinity)
-            case let .loaded(pushes) where pushes.isEmpty:
+        List {
+            if isLoading {
+                ProgressView("Loading push history…")
+            } else if case let .loaded(pushes) = state, pushes.isEmpty {
                 ContentUnavailableView {
                     Label("No Pushes Yet", systemImage: "paperplane")
                 } description: {
@@ -22,8 +21,8 @@ struct PushesView: View {
                 } actions: {
                     if canSendPushes { Button("Send a Push") { showingComposer = true } }
                 }
-            case let .loaded(pushes):
-                List(pushes) { push in
+            } else if case let .loaded(pushes) = state {
+                ForEach(pushes) { push in
                     HStack {
                         Button { selectedPush = push } label: { PushJobRow(push: push) }
                             .buttonStyle(.plain)
@@ -34,8 +33,7 @@ struct PushesView: View {
                         }
                     }
                 }
-                .refreshable { await load() }
-            case let .failed(message):
+            } else if case let .failed(message) = state {
                 ContentUnavailableView {
                     Label("Could Not Load Push History", systemImage: "wifi.exclamationmark")
                 } description: { Text(message) } actions: {
@@ -43,6 +41,7 @@ struct PushesView: View {
                 }
             }
         }
+        .refreshable { await load() }
         .toolbar {
             ToolbarItemGroup {
                 Button { Task { await load() } } label: { Label("Refresh", systemImage: "arrow.clockwise") }
@@ -71,6 +70,12 @@ struct PushesView: View {
 
     private var canSendPushes: Bool {
         app.role.canSendPushes && app.disabledAt == nil
+    }
+
+    private var isLoading: Bool {
+        if case .idle = state { return true }
+        if case .loading = state { return true }
+        return false
     }
 
     private var deletionPresented: Binding<Bool> {

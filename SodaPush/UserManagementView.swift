@@ -8,19 +8,16 @@ struct UserManagementView: View {
 
     var body: some View {
         NavigationStack {
-            Group {
-                switch state {
-                case .idle, .loading:
+            List {
+                if isLoading {
                     ProgressView("Loading users…")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                case let .loaded(users) where users.isEmpty:
+                } else if case let .loaded(users) = state, users.isEmpty {
                     ContentUnavailableView("No Users", systemImage: "person.2.slash")
-                case let .loaded(users):
-                    List(users) { user in
+                } else if case let .loaded(users) = state {
+                    ForEach(users) { user in
                         UserRow(user: user, edit: { selectedUser = user }, update: updateUser)
                     }
-                        .refreshable { await load() }
-                case let .failed(message):
+                } else if case let .failed(message) = state {
                     ContentUnavailableView {
                         Label("Could Not Load Users", systemImage: "person.crop.circle.badge.exclamationmark")
                     } description: { Text(message) } actions: {
@@ -28,6 +25,7 @@ struct UserManagementView: View {
                     }
                 }
             }
+            .refreshable { await load() }
             .navigationTitle("Users")
             .toolbar {
                 Button { showingCreate = true } label: { Label("New User", systemImage: "person.badge.plus") }
@@ -45,6 +43,12 @@ struct UserManagementView: View {
         do { state = .loaded(try await store.users()) }
         catch is CancellationError { return }
         catch { state = .failed(error.localizedDescription) }
+    }
+
+    private var isLoading: Bool {
+        if case .idle = state { return true }
+        if case .loading = state { return true }
+        return false
     }
 
     private func updateUser(_ user: AuthUser, role: AppRole?, disabled: Bool?) {
