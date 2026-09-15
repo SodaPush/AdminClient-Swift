@@ -126,49 +126,51 @@ private struct AppsWorkspaceView: View {
     @State private var showingCreateApp = false
 
     var body: some View {
-        List {
-            if isLoading {
-                ForEach(0..<4, id: \.self) { _ in AppPlaceholderRow() }
-                    .redacted(reason: .placeholder)
-            } else if case let .loaded(apps) = store.appsState, filtered(apps).isEmpty {
-                ContentUnavailableView {
-                    Label(searchText.isEmpty ? "No Applications" : "No Matches", systemImage: "app.dashed")
-                } description: {
-                    Text(searchText.isEmpty ? "Create your first application to configure APNs and register devices." : "Try a different search term.")
-                } actions: {
-                    if searchText.isEmpty && store.currentUser?.role.canManageApps == true {
-                        Button("Create Application") { showingCreateApp = true }
+        NavigationStack {
+            List {
+                if isLoading {
+                    ForEach(0..<4, id: \.self) { _ in AppPlaceholderRow() }
+                        .redacted(reason: .placeholder)
+                } else if case let .loaded(apps) = store.appsState, filtered(apps).isEmpty {
+                    ContentUnavailableView {
+                        Label(searchText.isEmpty ? "No Applications" : "No Matches", systemImage: "app.dashed")
+                    } description: {
+                        Text(searchText.isEmpty ? "Create your first application to configure APNs and register devices." : "Try a different search term.")
+                    } actions: {
+                        if searchText.isEmpty && store.currentUser?.role.canManageApps == true {
+                            Button("Create Application") { showingCreateApp = true }
+                        }
+                    }
+                } else if case let .loaded(apps) = store.appsState {
+                    ForEach(filtered(apps)) { app in
+                        NavigationLink {
+                            AppDetailView(app: app)
+                        } label: {
+                            AppRow(app: app)
+                        }
+                    }
+                } else if case let .failed(message) = store.appsState {
+                    ContentUnavailableView {
+                        Label("Could Not Load Applications", systemImage: "wifi.exclamationmark")
+                    } description: { Text(message) } actions: {
+                        Button("Try Again") { Task { await store.reloadApps() } }
                     }
                 }
-            } else if case let .loaded(apps) = store.appsState {
-                ForEach(filtered(apps)) { app in
-                    NavigationLink {
-                        AppDetailView(app: app)
-                    } label: {
-                        AppRow(app: app)
+            }
+            .refreshable { await store.reloadApps() }
+            .navigationTitle("Applications")
+            .searchable(text: $searchText, prompt: "Name or bundle ID")
+            .toolbar {
+                ToolbarItemGroup {
+                    Button { Task { await store.reloadApps() } } label: { Label("Refresh", systemImage: "arrow.clockwise") }
+                    if store.currentUser?.role.canManageApps == true {
+                        Button { showingCreateApp = true } label: { Label("New Application", systemImage: "plus.circle.fill") }
+                            .buttonStyle(.borderedProminent)
                     }
                 }
-            } else if case let .failed(message) = store.appsState {
-                ContentUnavailableView {
-                    Label("Could Not Load Applications", systemImage: "wifi.exclamationmark")
-                } description: { Text(message) } actions: {
-                    Button("Try Again") { Task { await store.reloadApps() } }
-                }
             }
+            .sheet(isPresented: $showingCreateApp) { CreateAppView() }
         }
-        .refreshable { await store.reloadApps() }
-        .navigationTitle("Applications")
-        .searchable(text: $searchText, prompt: "Name or bundle ID")
-        .toolbar {
-            ToolbarItemGroup {
-                Button { Task { await store.reloadApps() } } label: { Label("Refresh", systemImage: "arrow.clockwise") }
-                if store.currentUser?.role.canManageApps == true {
-                    Button { showingCreateApp = true } label: { Label("New Application", systemImage: "plus.circle.fill") }
-                        .buttonStyle(.borderedProminent)
-                }
-            }
-        }
-        .sheet(isPresented: $showingCreateApp) { CreateAppView() }
     }
 
     private func filtered(_ apps: [AppSummary]) -> [AppSummary] {

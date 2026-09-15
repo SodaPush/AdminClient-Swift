@@ -41,6 +41,8 @@ struct PushesView: View {
                 }
             }
         }
+        .sheet(isPresented: $showingComposer) { PushComposerView(app: app) { await load() } }
+        .sheet(item: $selectedPush) { push in PushJobDetailView(app: app, initialPush: push) }
         .refreshable { await load() }
         .toolbar {
             ToolbarItemGroup {
@@ -50,8 +52,6 @@ struct PushesView: View {
                 }
             }
         }
-        .sheet(isPresented: $showingComposer) { PushComposerView(app: app) { await load() } }
-        .sheet(item: $selectedPush) { push in PushJobDetailView(app: app, initialPush: push) }
         .alert("Delete Push Record?", isPresented: deletionPresented, presenting: pendingDeletion) { push in
             Button("Delete", role: .destructive) { delete(push) }
             Button("Cancel", role: .cancel) { pendingDeletion = nil }

@@ -69,15 +69,15 @@ struct SettingsView: View {
             }
             .formStyle(.grouped)
             .navigationTitle("Settings")
-        }
-        .alert("Remove Saved Server?", isPresented: removalPresented, presenting: pendingRemoval) { profile in
-            Button("Remove", role: .destructive) { remove(profile) }
-            Button("Cancel", role: .cancel) { pendingRemoval = nil }
-        } message: { profile in
-            Text("The saved connection and its local session token for \(profile.name) will be removed.")
-        }
-        .sheet(item: $editingUser) { user in
-            EditUserView(user: user, requiresCurrentPassword: user.role != .owner) { _ in }
+            .alert("Remove Saved Server?", isPresented: removalPresented, presenting: pendingRemoval) { profile in
+                Button("Remove", role: .destructive) { remove(profile) }
+                Button("Cancel", role: .cancel) { pendingRemoval = nil }
+            } message: { profile in
+                Text("The saved connection and its local session token for \(profile.name) will be removed.")
+            }
+            .sheet(item: $editingUser) { user in
+                EditUserView(user: user, requiresCurrentPassword: user.role != .owner) { _ in }
+            }
         }
     }
 
