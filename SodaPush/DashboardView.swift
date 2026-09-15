@@ -61,6 +61,8 @@ private struct OverviewView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 VStack(alignment: .leading, spacing: 12) {
+                    SodaBrandIcon(size: 64)
+                        .accessibilityHidden(true)
                     Label("YOUR APNS CONTROL PLANE", systemImage: "cloud.fill")
                         .font(.caption.weight(.bold))
                         .foregroundStyle(.tint)

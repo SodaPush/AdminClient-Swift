@@ -8,9 +8,8 @@ struct ContentView: View {
             Color.clear
             if case .restoring = store.sessionState {
                 VStack(spacing: 14) {
-                    Image(systemName: "bell.and.waves.left.and.right.fill")
-                        .font(.system(size: 44))
-                        .foregroundStyle(.tint)
+                    SodaBrandIcon(size: 64)
+                        .accessibilityHidden(true)
                     ProgressView("Restoring your workspace…")
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

@@ -50,7 +50,16 @@ struct SettingsView: View {
                 }
 
                 Section("About") {
-                    LabeledContent("Client", value: "SodaPush 1.0")
+                    HStack(spacing: 12) {
+                        SodaBrandIcon(size: 44)
+                            .accessibilityHidden(true)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("SodaPush").font(.headline)
+                            Text("Native Admin Client · 1.0")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                     Text("A native management console for your self-hosted SodaPush service.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
