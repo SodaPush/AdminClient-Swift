@@ -20,7 +20,7 @@ struct ServerSetupView: View {
                 WelcomeHeader()
                 connectionCard
                 if snapshot != nil { authenticationCard }
-                Text("You need to deploy the SodaPush backend server yourself on Cloudflare Workers or your self-hosted server. For more informations, please [check out on GitHub](https://github.com/SodaPush/Server)")
+                Text("You need to deploy the SodaPush backend server yourself on Cloudflare Workers or your self-hosted server. For more informations, please [check out on GitHub](https://github.com/SodaPush)")
                 savedServers
             }
             .frame(maxWidth: 560)
