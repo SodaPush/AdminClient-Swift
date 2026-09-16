@@ -2,6 +2,10 @@
 
 SodaPush Admin is the native SwiftUI console for an APNs backend you deploy in your own Cloudflare account. [SodaPush Server](https://github.com/SodaPush/Server) runs on Workers, D1, and Queues; within Cloudflare's free-plan limits, small deployments can cost nothing to host. You retain control of APNs credentials, device records, targeting data, and delivery history. Receiving apps integrate [SodaPush SDK](https://github.com/SodaPush/SDK-Swift).
 
+> [!WARNING]
+>
+> Please use SodaPush reasonably. SodaPush project are only provided as tools, and SodaPush itself is not a service provider. We are not responsible for the information sent or the behavior of the users.
+
 ## Requirements
 
 - Xcode 27+
