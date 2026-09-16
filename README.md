@@ -5,7 +5,7 @@ SodaPush Admin is the native SwiftUI console for an APNs backend you deploy in y
 ## Requirements
 
 - Xcode 27+
-- iOS 27+ or macOS 14+
+- iOS 26+ or macOS 14+
 - A deployed SodaPush Server at an HTTPS origin
 
 ## Features
