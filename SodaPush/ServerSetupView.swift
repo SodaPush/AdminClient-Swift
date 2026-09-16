@@ -20,6 +20,7 @@ struct ServerSetupView: View {
                 WelcomeHeader()
                 connectionCard
                 if snapshot != nil { authenticationCard }
+                Text("You need to deploy the SodaPush backend server yourself on Cloudflare Workers or your self-hosted server. For more informations, please [check out on GitHub](https://github.com/SodaPush/Server)")
                 savedServers
             }
             .frame(maxWidth: 560)
@@ -219,7 +220,7 @@ private struct WelcomeHeader: View {
                 .accessibilityHidden(true)
             Text("SodaPush")
                 .font(.largeTitle.bold())
-            Text("Connect to the APNs backend in your own Cloudflare account. Your credentials, devices, and delivery history stay under your control.")
+            Text("Connect to the SodaPush APNs backend server. Your credentials, devices, and delivery history stay under your control.")
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
         }
