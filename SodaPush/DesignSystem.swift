@@ -51,7 +51,7 @@ struct SodaBrandIcon: View {
                 .resizable()
                 .scaledToFit()
             #else
-            if let appIcon = UIImage(named: "AppIcon") ?? UIImage(named: "AppIcon60x60") {
+            if let appIcon = getAppIcon() ?? UIImage(named: "AppIcon60x60") {
                 Image(uiImage: appIcon)
                     .resizable()
                     .scaledToFit()
@@ -75,6 +75,17 @@ struct SodaBrandIcon: View {
             return icon
         }
         return NSApplication.shared.applicationIconImage
+    }
+    #endif
+    #if os(iOS)
+    func getAppIcon() -> UIImage? {
+        guard let icons = Bundle.main.infoDictionary?["CFBundleIcons"] as? [String: Any],
+              let primaryIcon = icons["CFBundlePrimaryIcon"] as? [String: Any],
+              let iconFiles = primaryIcon["CFBundleIconFiles"] as? [String],
+              let iconName = iconFiles.last else {
+            return nil
+        }
+        return UIImage(named: iconName)
     }
     #endif
 }
