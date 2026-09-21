@@ -459,6 +459,25 @@ private struct PushJobDetailView: View {
                     LabeledContent("ID", value: push.id)
                     LabeledContent("Created", value: SodaDate.formatted(push.createdAt))
                     LabeledContent("Updated", value: SodaDate.formatted(push.updatedAt))
+                    if let credentialID = push.credentialID {
+                        LabeledContent("APNs Credential", value: credentialID)
+                    }
+                }
+                Section("Audience") {
+                    if let target = push.target {
+                        PushTargetSnapshotView(target: target)
+                    } else {
+                        Text("Audience information is unavailable for this legacy record.")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Section("Payload") {
+                    if let payload = push.payload {
+                        JSONSnapshotView(value: payload)
+                    } else {
+                        Text("Payload information is unavailable for this legacy record.")
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 Section("Deliveries") {
                     if let deliveries = detail?.deliveries, !deliveries.isEmpty {
@@ -494,6 +513,75 @@ private struct PushJobDetailView: View {
             guard !Task.isCancelled else { return }
             await load()
         }
+    }
+}
+
+private struct PushTargetSnapshotView: View {
+    let target: PushTarget
+
+    var body: some View {
+        if target.all == true {
+            LabeledContent("Target", value: "All active devices")
+        } else if let installationIDs = target.installationIds {
+            SnapshotValuesView(label: "Devices", values: installationIDs)
+        } else if let tags = target.tags {
+            SnapshotValuesView(label: "Tags", values: tags)
+        } else if let languages = target.languages {
+            SnapshotValuesView(label: "Languages", values: languages)
+        } else if let userIDs = target.userIDs {
+            SnapshotValuesView(label: "Business User IDs", values: userIDs)
+        } else {
+            Text("No audience selector was recorded.")
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+private struct SnapshotValuesView: View {
+    let label: String
+    let values: [String]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text(values.joined(separator: "\n"))
+                .font(.callout.monospaced())
+                .textSelection(.enabled)
+        }
+    }
+}
+
+private struct JSONSnapshotView: View {
+    let value: JSONValue
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(formattedValue)
+                .font(.callout.monospaced())
+                .textSelection(.enabled)
+            Button("Copy Payload", systemImage: "doc.on.doc") {
+                SodaClipboard.copy(formattedValue)
+            }
+            .buttonStyle(.borderless)
+        }
+    }
+
+    private var formattedValue: String {
+        guard let data = try? JSONEncoder.prettyPrinted.encode(value),
+              let string = String(data: data, encoding: .utf8) else {
+            return "Payload could not be formatted."
+        }
+        return string
+    }
+}
+
+private extension JSONEncoder {
+    static var prettyPrinted: JSONEncoder {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        return encoder
     }
 }
 

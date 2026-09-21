@@ -270,8 +270,8 @@ struct PushJob: nonisolated Codable, Identifiable, Equatable, Sendable {
     let environment: PushEnvironment
     let credentialID: String?
     let pushType: PushType
-    let target: PushTarget
-    let payload: JSONValue
+    let target: PushTarget?
+    let payload: JSONValue?
     let status: String
     let totalCount: Int
     let successCount: Int
@@ -279,6 +279,29 @@ struct PushJob: nonisolated Codable, Identifiable, Equatable, Sendable {
     let createdBy: String?
     let createdAt: String
     let updatedAt: String
+
+    private enum CodingKeys: String, CodingKey {
+        case id, appID, environment, credentialID, pushType, target, payload, status
+        case totalCount, successCount, failureCount, createdBy, createdAt, updatedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        appID = try container.decodeIfPresent(String.self, forKey: .appID) ?? ""
+        environment = try container.decodeIfPresent(PushEnvironment.self, forKey: .environment) ?? .development
+        credentialID = try container.decodeIfPresent(String.self, forKey: .credentialID)
+        pushType = try container.decodeIfPresent(PushType.self, forKey: .pushType) ?? .alert
+        target = try container.decodeIfPresent(PushTarget.self, forKey: .target)
+        payload = try container.decodeIfPresent(JSONValue.self, forKey: .payload)
+        status = try container.decodeIfPresent(String.self, forKey: .status) ?? "unknown"
+        totalCount = try container.decodeIfPresent(Int.self, forKey: .totalCount) ?? 0
+        successCount = try container.decodeIfPresent(Int.self, forKey: .successCount) ?? 0
+        failureCount = try container.decodeIfPresent(Int.self, forKey: .failureCount) ?? 0
+        createdBy = try container.decodeIfPresent(String.self, forKey: .createdBy)
+        createdAt = try container.decodeIfPresent(String.self, forKey: .createdAt) ?? ""
+        updatedAt = try container.decodeIfPresent(String.self, forKey: .updatedAt) ?? createdAt
+    }
 }
 
 struct PushesResponse: nonisolated Codable, Sendable { let pushes: [PushJob] }
