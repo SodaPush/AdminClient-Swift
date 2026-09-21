@@ -42,7 +42,9 @@ struct ServerSetupView: View {
             VStack(alignment: .leading, spacing: 14) {
                 TextField("https://push.example.com", text: $serverURL)
                     .textFieldStyle(.roundedBorder)
+                #if os(iOS)
                     .keyboardType(.URL)
+                #endif
                     .autocorrectionDisabled()
                     .disabled(snapshot != nil || isChecking || store.isSigningIn)
                     .accessibilityLabel("Server URL")
