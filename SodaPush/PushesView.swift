@@ -112,7 +112,13 @@ private struct PushJobRow: View {
                     StatusBadge(text: push.environment.title, tint: StatusBadge.color(for: push.environment.rawValue))
                 }
                 Text(push.id).font(.caption.monospaced()).foregroundStyle(.secondary).lineLimit(1)
-                Text(SodaDate.formatted(push.createdAt)).font(.caption).foregroundStyle(.secondary)
+                if let scheduledAt = push.scheduledAt {
+                    Label(SodaDate.formatted(scheduledAt), systemImage: "clock")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text(SodaDate.formatted(push.createdAt)).font(.caption).foregroundStyle(.secondary)
+                }
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 6) {
@@ -149,6 +155,9 @@ struct PushComposerView: View {
     @State private var credentials: [APNsCredential] = []
     @State private var selectedCredentialID: String?
     @State private var selectedTargetValues: Set<String> = []
+    @State private var deliveryMode: PushDeliveryMode = .immediate
+    @State private var scheduledDate = Date().addingTimeInterval(600)
+    @State private var localNotificationIdentifier = ""
     @State private var isSending = false
     @State private var errorMessage: String?
 
@@ -163,29 +172,16 @@ struct PushComposerView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Delivery") {
-                    Picker("Environment", selection: $environment) {
-                        ForEach(PushEnvironment.allCases) { Text($0.title).tag($0) }
-                    }
-                    .pickerStyle(.segmented)
-                    Picker("Push Type", selection: $pushType) {
-                        ForEach(PushType.allCases) { Text(typeTitle($0)).tag($0) }
-                    }
-                    Picker("APNs Key", selection: $selectedCredentialID) {
-                        ForEach(availableCredentials) { credential in
-                            Text("\(credential.keyID)\(credential.isDefault ? " (Default)" : "")")
-                                .tag(Optional(credential.id))
-                        }
-                    }
-                    if availableCredentials.isEmpty {
-                        Label("Add an APNs key for \(environment.title) before sending.", systemImage: "exclamationmark.triangle.fill")
-                            .font(.caption)
-                            .foregroundStyle(.orange)
-                    }
-                    Picker("Audience", selection: $targetMode) {
-                        ForEach(PushTargetMode.allCases) { Text($0.title).tag($0) }
-                    }
-                }
+                PushDeliverySettingsView(
+                    environment: $environment,
+                    deliveryMode: $deliveryMode,
+                    scheduledDate: $scheduledDate,
+                    localNotificationIdentifier: $localNotificationIdentifier,
+                    pushType: $pushType,
+                    selectedCredentialID: $selectedCredentialID,
+                    targetMode: $targetMode,
+                    availableCredentials: availableCredentials
+                )
 
                 if targetMode == .devices {
                     Section("Devices") {
@@ -226,25 +222,27 @@ struct PushComposerView: View {
                     }
                 }
 
-                if pushType == .alert && !customPayload {
+                if (pushType == .alert && !customPayload && !deliveryMode.isLocalCommand) || deliveryMode == .localSchedule {
                     Section("Notification") {
                         TextField("Title", text: $title)
                         TextField("Message", text: $message, axis: .vertical).lineLimit(3...8)
                     }
                 }
 
-                Section("Payload") {
-                    Toggle("Edit custom JSON", isOn: $customPayload)
-                    if customPayload || pushType == .liveactivity {
-                        TextEditor(text: $payloadText)
-                            .font(.caption.monospaced())
-                            .frame(minHeight: 180)
-                        Text("\(payloadByteCount) / 4096 bytes")
-                            .font(.caption)
-                            .foregroundStyle(payloadByteCount > 4096 ? .red : .secondary)
-                    } else if pushType == .background {
-                        Text("A background payload with content-available: 1 will be generated.")
-                            .font(.caption).foregroundStyle(.secondary)
+                if !deliveryMode.isLocalCommand {
+                    Section("Payload") {
+                        Toggle("Edit custom JSON", isOn: $customPayload)
+                        if customPayload || pushType == .liveactivity {
+                            TextEditor(text: $payloadText)
+                                .font(.caption.monospaced())
+                                .frame(minHeight: 180)
+                            Text("\(payloadByteCount) / 4096 bytes")
+                                .font(.caption)
+                                .foregroundStyle(payloadByteCount > 4096 ? .red : .secondary)
+                        } else if pushType == .background {
+                            Text("A background payload with content-available: 1 will be generated.")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
                     }
                 }
 
@@ -264,6 +262,15 @@ struct PushComposerView: View {
             }
             .task { await loadResources() }
             .onChange(of: pushType) { _, newValue in preparePayload(for: newValue) }
+            .onChange(of: deliveryMode) { _, newValue in
+                if newValue.isLocalCommand {
+                    pushType = .background
+                    customPayload = false
+                }
+                if newValue == .serverScheduled && scheduledDate.timeIntervalSinceNow > 86_350 {
+                    scheduledDate = Date().addingTimeInterval(600)
+                }
+            }
             .onChange(of: environment) { _, _ in
                 let available = Set(availableDevices.map(\.installationID))
                 selectedInstallationIDs.formIntersection(available)
@@ -300,17 +307,18 @@ struct PushComposerView: View {
         if selectedCredentialID == nil { return false }
         if targetMode == .devices && selectedInstallationIDs.isEmpty { return false }
         if targetMode.usesValues && selectedTargetValues.isEmpty { return false }
+        if deliveryMode == .serverScheduled && (scheduledDate <= Date() || scheduledDate.timeIntervalSinceNow > 86_400) { return false }
+        if deliveryMode.isLocalCommand {
+            let identifierCount = localNotificationIdentifier.trimmingCharacters(in: .whitespacesAndNewlines).count
+            if identifierCount == 0 || identifierCount > 128 { return false }
+        }
+        if deliveryMode == .localSchedule {
+            return scheduledDate > Date() && !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+        if deliveryMode == .localCancel { return true }
         if pushType == .alert && !customPayload { return !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
         if customPayload || pushType == .liveactivity { return !payloadText.isEmpty && payloadByteCount <= 4096 }
         return true
-    }
-
-    private func typeTitle(_ type: PushType) -> String {
-        switch type {
-        case .alert: "Alert"
-        case .background: "Background"
-        case .liveactivity: "Live Activity"
-        }
     }
 
     private func toggle(_ id: String) {
@@ -360,6 +368,25 @@ struct PushComposerView: View {
     }
 
     private func buildPayload() throws -> JSONValue {
+        if deliveryMode.isLocalCommand {
+            var command: [String: JSONValue] = [
+                "action": .string(deliveryMode == .localSchedule ? "schedule" : "cancel"),
+                "identifier": .string(localNotificationIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)),
+            ]
+            if deliveryMode == .localSchedule {
+                command["fireAt"] = .string(scheduledDate.ISO8601Format())
+                command["title"] = .string(title.trimmingCharacters(in: .whitespacesAndNewlines))
+                command["body"] = .string(message.trimmingCharacters(in: .whitespacesAndNewlines))
+                command["sound"] = .bool(true)
+            }
+            return .object([
+                "aps": .object(["content-available": .number(1)]),
+                "sodapush": .object([
+                    "version": .number(1),
+                    "localNotification": .object(command),
+                ]),
+            ])
+        }
         if customPayload || pushType == .liveactivity {
             guard let data = payloadText.data(using: .utf8) else { throw ComposerError.invalidPayload }
             do {
@@ -395,7 +422,8 @@ struct PushComposerView: View {
                 let payload = try buildPayload()
                 let encoded = try JSONEncoder().encode(payload)
                 guard encoded.count <= 4096 else { throw ComposerError.payloadTooLarge }
-                _ = try await store.sendPush(appID: app.id, request: PushRequest(environment: environment, credentialID: selectedCredentialID, pushType: pushType, target: buildTarget(), payload: payload))
+                let scheduledAt = deliveryMode == .serverScheduled ? scheduledDate.ISO8601Format() : nil
+                _ = try await store.sendPush(appID: app.id, request: PushRequest(environment: environment, credentialID: selectedCredentialID, pushType: pushType, target: buildTarget(), payload: payload, scheduledAt: scheduledAt))
                 await onSent()
                 dismiss()
             } catch { errorMessage = error.localizedDescription }
@@ -409,6 +437,92 @@ struct PushComposerView: View {
             case .invalidPayload: "Enter a valid JSON object for the APNs payload."
             case .payloadTooLarge: "The APNs payload exceeds 4096 bytes."
             }
+        }
+    }
+}
+
+private struct PushDeliverySettingsView: View {
+    @Binding var environment: PushEnvironment
+    @Binding var deliveryMode: PushDeliveryMode
+    @Binding var scheduledDate: Date
+    @Binding var localNotificationIdentifier: String
+    @Binding var pushType: PushType
+    @Binding var selectedCredentialID: String?
+    @Binding var targetMode: PushTargetMode
+    let availableCredentials: [APNsCredential]
+
+    var body: some View {
+        Section("Delivery") {
+            Picker("Environment", selection: $environment) {
+                ForEach(PushEnvironment.allCases) { Text($0.title).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            Picker("Delivery Mode", selection: $deliveryMode) {
+                ForEach(PushDeliveryMode.allCases) { Text($0.title).tag($0) }
+            }
+            if deliveryMode.usesDate {
+                DatePicker(deliveryMode.dateLabel, selection: $scheduledDate, in: allowedDates)
+            }
+            if deliveryMode.isLocalCommand {
+                TextField("Local Notification ID", text: $localNotificationIdentifier)
+                Text("Sends a background control push for SodaPush SDK to process on each device. Background delivery is not guaranteed by Apple.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                Picker("Push Type", selection: $pushType) {
+                    ForEach(PushType.allCases) { Text($0.title).tag($0) }
+                }
+            }
+            Picker("APNs Key", selection: $selectedCredentialID) {
+                ForEach(availableCredentials) { credential in
+                    Text("\(credential.keyID)\(credential.isDefault ? " (Default)" : "")")
+                        .tag(Optional(credential.id))
+                }
+            }
+            if availableCredentials.isEmpty {
+                Label("Add an APNs key for \(environment.title) before sending.", systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
+            Picker("Audience", selection: $targetMode) {
+                ForEach(PushTargetMode.allCases) { Text($0.title).tag($0) }
+            }
+        }
+    }
+
+    private var allowedDates: ClosedRange<Date> {
+        let now = Date()
+        let maximumInterval: TimeInterval = deliveryMode == .serverScheduled ? 86_350 : 31_536_000
+        return now.addingTimeInterval(5)...now.addingTimeInterval(maximumInterval)
+    }
+}
+
+private enum PushDeliveryMode: String, CaseIterable, Identifiable {
+    case immediate
+    case serverScheduled
+    case localSchedule
+    case localCancel
+
+    var id: Self { self }
+    var title: String {
+        switch self {
+        case .immediate: "Send Now"
+        case .serverScheduled: "Server Scheduled"
+        case .localSchedule: "Schedule on Device"
+        case .localCancel: "Cancel on Device"
+        }
+    }
+    var isLocalCommand: Bool { self == .localSchedule || self == .localCancel }
+    var usesDate: Bool { self == .serverScheduled || self == .localSchedule }
+    var dateLabel: String { self == .serverScheduled ? "Send At" : "Display At" }
+}
+
+private extension PushType {
+    var title: String {
+        switch self {
+        case .alert: "Alert"
+        case .background: "Background"
+        case .liveactivity: "Live Activity"
         }
     }
 }
@@ -458,6 +572,9 @@ private struct PushJobDetailView: View {
                 Section("Job") {
                     LabeledContent("ID", value: push.id)
                     LabeledContent("Created", value: SodaDate.formatted(push.createdAt))
+                    if let scheduledAt = push.scheduledAt {
+                        LabeledContent("Scheduled", value: SodaDate.formatted(scheduledAt))
+                    }
                     LabeledContent("Updated", value: SodaDate.formatted(push.updatedAt))
                     if let credentialID = push.credentialID {
                         LabeledContent("APNs Credential", value: credentialID)

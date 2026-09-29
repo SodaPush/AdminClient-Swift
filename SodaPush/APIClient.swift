@@ -179,7 +179,10 @@ actor APIClient {
     }
 
     func createPush(appID: String, request: PushRequest) async throws -> PushResponse {
-        try await send(path: ["v1", "apps", appID, "pushes"], method: "POST", body: request)
+        let path = request.scheduledAt == nil
+            ? ["v1", "apps", appID, "pushes"]
+            : ["v1", "apps", appID, "pushes", "schedule"]
+        return try await send(path: path, method: "POST", body: request)
     }
 
     func pushes(appID: String) async throws -> [PushJob] {

@@ -232,17 +232,19 @@ struct PushRequest: nonisolated Codable, Sendable {
     let pushType: PushType
     let target: PushTarget
     let payload: JSONValue
+    let scheduledAt: String?
 
-    init(environment: PushEnvironment, credentialID: String? = nil, pushType: PushType, target: PushTarget, payload: JSONValue) {
+    init(environment: PushEnvironment, credentialID: String? = nil, pushType: PushType, target: PushTarget, payload: JSONValue, scheduledAt: String? = nil) {
         self.environment = environment
         self.credentialID = credentialID
         self.pushType = pushType
         self.target = target
         self.payload = payload
+        self.scheduledAt = scheduledAt
     }
 
-    init(environment: PushEnvironment, credentialID: String? = nil, pushType: PushType, target: PushTarget, payload: APNsPayload) {
-        self.init(environment: environment, credentialID: credentialID, pushType: pushType, target: target, payload: payload.jsonValue)
+    init(environment: PushEnvironment, credentialID: String? = nil, pushType: PushType, target: PushTarget, payload: APNsPayload, scheduledAt: String? = nil) {
+        self.init(environment: environment, credentialID: credentialID, pushType: pushType, target: target, payload: payload.jsonValue, scheduledAt: scheduledAt)
     }
 }
 
@@ -262,7 +264,20 @@ struct PushAlert: nonisolated Codable, Sendable {
     var jsonValue: JSONValue { .object(["title": .string(title), "body": .string(body)]) }
 }
 
-struct PushResponse: nonisolated Codable, Sendable { let jobID: String; let status: String }
+struct PushResponse: nonisolated Codable, Sendable {
+    let jobID: String
+    let status: String
+    let scheduledAt: String?
+
+    private enum CodingKeys: String, CodingKey { case jobID, status, scheduledAt }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        jobID = try container.decode(String.self, forKey: .jobID)
+        status = try container.decode(String.self, forKey: .status)
+        scheduledAt = try container.decodeIfPresent(String.self, forKey: .scheduledAt)
+    }
+}
 
 struct PushJob: nonisolated Codable, Identifiable, Equatable, Sendable {
     let id: String
@@ -272,6 +287,7 @@ struct PushJob: nonisolated Codable, Identifiable, Equatable, Sendable {
     let pushType: PushType
     let target: PushTarget?
     let payload: JSONValue?
+    let scheduledAt: String?
     let status: String
     let totalCount: Int
     let successCount: Int
@@ -281,7 +297,7 @@ struct PushJob: nonisolated Codable, Identifiable, Equatable, Sendable {
     let updatedAt: String
 
     private enum CodingKeys: String, CodingKey {
-        case id, appID, environment, credentialID, pushType, target, payload, status
+        case id, appID, environment, credentialID, pushType, target, payload, scheduledAt, status
         case totalCount, successCount, failureCount, createdBy, createdAt, updatedAt
     }
 
@@ -294,6 +310,7 @@ struct PushJob: nonisolated Codable, Identifiable, Equatable, Sendable {
         pushType = try container.decodeIfPresent(PushType.self, forKey: .pushType) ?? .alert
         target = try container.decodeIfPresent(PushTarget.self, forKey: .target)
         payload = try container.decodeIfPresent(JSONValue.self, forKey: .payload)
+        scheduledAt = try container.decodeIfPresent(String.self, forKey: .scheduledAt)
         status = try container.decodeIfPresent(String.self, forKey: .status) ?? "unknown"
         totalCount = try container.decodeIfPresent(Int.self, forKey: .totalCount) ?? 0
         successCount = try container.decodeIfPresent(Int.self, forKey: .successCount) ?? 0
