@@ -179,7 +179,6 @@ struct PushComposerView: View {
     @State private var selectedTargetValues: Set<String> = []
     @State private var deliveryMode: PushDeliveryMode = .immediate
     @State private var scheduledDate = Date().addingTimeInterval(600)
-    @State private var localNotificationIdentifier = ""
     @State private var isSending = false
     @State private var errorMessage: String?
 
@@ -198,7 +197,6 @@ struct PushComposerView: View {
                     environment: $environment,
                     deliveryMode: $deliveryMode,
                     scheduledDate: $scheduledDate,
-                    localNotificationIdentifier: $localNotificationIdentifier,
                     pushType: $pushType,
                     selectedCredentialID: $selectedCredentialID,
                     targetMode: $targetMode,
@@ -330,10 +328,6 @@ struct PushComposerView: View {
         if targetMode == .devices && selectedInstallationIDs.isEmpty { return false }
         if targetMode.usesValues && selectedTargetValues.isEmpty { return false }
         if deliveryMode == .serverScheduled && (scheduledDate <= Date() || scheduledDate.timeIntervalSinceNow > 86_400) { return false }
-        if deliveryMode.isLocalSchedule {
-            let identifierCount = localNotificationIdentifier.trimmingCharacters(in: .whitespacesAndNewlines).count
-            if identifierCount == 0 || identifierCount > 128 { return false }
-        }
         if deliveryMode == .localSchedule {
             return scheduledDate > Date() && !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
@@ -392,7 +386,6 @@ struct PushComposerView: View {
         if deliveryMode.isLocalSchedule {
             var command: [String: JSONValue] = [
                 "action": .string("schedule"),
-                "identifier": .string(localNotificationIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)),
             ]
             command["fireAt"] = .string(scheduledDate.ISO8601Format())
             command["title"] = .string(title.trimmingCharacters(in: .whitespacesAndNewlines))
@@ -464,7 +457,6 @@ private struct PushDeliverySettingsView: View {
     @Binding var environment: PushEnvironment
     @Binding var deliveryMode: PushDeliveryMode
     @Binding var scheduledDate: Date
-    @Binding var localNotificationIdentifier: String
     @Binding var pushType: PushType
     @Binding var selectedCredentialID: String?
     @Binding var targetMode: PushTargetMode
@@ -483,8 +475,7 @@ private struct PushDeliverySettingsView: View {
                 DatePicker(deliveryMode.dateLabel, selection: $scheduledDate, in: allowedDates)
             }
             if deliveryMode.isLocalSchedule {
-                TextField("Local Notification ID", text: $localNotificationIdentifier)
-                Text("Sends a background control push for SodaPush SDK to process on each device. Background delivery is not guaranteed by Apple.")
+                Text("The Server generates the local notification ID automatically. A background control push asks the SodaPush SDK to schedule it on each device; background delivery is not guaranteed by Apple.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
