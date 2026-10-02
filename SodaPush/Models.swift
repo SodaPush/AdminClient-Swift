@@ -288,6 +288,9 @@ struct PushJob: nonisolated Codable, Identifiable, Equatable, Sendable {
     let target: PushTarget?
     let payload: JSONValue?
     let scheduledAt: String?
+    let cancellationOf: String?
+    let localCancelledAt: String?
+    let localCancellationJobID: String?
     let status: String
     let totalCount: Int
     let successCount: Int
@@ -297,7 +300,7 @@ struct PushJob: nonisolated Codable, Identifiable, Equatable, Sendable {
     let updatedAt: String
 
     private enum CodingKeys: String, CodingKey {
-        case id, appID, environment, credentialID, pushType, target, payload, scheduledAt, status
+        case id, appID, environment, credentialID, pushType, target, payload, scheduledAt, cancellationOf, localCancelledAt, localCancellationJobID, status
         case totalCount, successCount, failureCount, createdBy, createdAt, updatedAt
     }
 
@@ -311,6 +314,9 @@ struct PushJob: nonisolated Codable, Identifiable, Equatable, Sendable {
         target = try container.decodeIfPresent(PushTarget.self, forKey: .target)
         payload = try container.decodeIfPresent(JSONValue.self, forKey: .payload)
         scheduledAt = try container.decodeIfPresent(String.self, forKey: .scheduledAt)
+        cancellationOf = try container.decodeIfPresent(String.self, forKey: .cancellationOf)
+        localCancelledAt = try container.decodeIfPresent(String.self, forKey: .localCancelledAt)
+        localCancellationJobID = try container.decodeIfPresent(String.self, forKey: .localCancellationJobID)
         status = try container.decodeIfPresent(String.self, forKey: .status) ?? "unknown"
         totalCount = try container.decodeIfPresent(Int.self, forKey: .totalCount) ?? 0
         successCount = try container.decodeIfPresent(Int.self, forKey: .successCount) ?? 0

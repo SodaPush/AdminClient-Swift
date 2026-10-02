@@ -19,7 +19,7 @@ SodaPush Admin is the native SwiftUI console for an APNs backend you deploy in y
 - Upload multiple APNs `.p8` keys, assign each to sandbox or production, and choose a default for each environment.
 - Inspect devices with language, locale, custom tags, business user ID, environment, version, and status.
 - Send alert, background, Live Activity, or custom JSON pushes immediately or through a Server-side schedule.
-- Send SDK control pushes that schedule or cancel a local notification on selected devices.
+- Send SDK control pushes that schedule a local notification on selected devices, then cancel it from the original push record.
 - Target all devices or select from reported installations, tags, device languages, and business user IDs.
 - Select the APNs key per push, with automatic environment-specific defaults.
 - Inspect delivery results and delete completed push records.

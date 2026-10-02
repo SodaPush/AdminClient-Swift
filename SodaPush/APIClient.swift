@@ -194,6 +194,10 @@ actor APIClient {
         try await send(path: ["v1", "apps", appID, "pushes", pushID], method: "GET")
     }
 
+    func cancelLocalPush(appID: String, pushID: String) async throws -> PushResponse {
+        try await send(path: ["v1", "apps", appID, "pushes", pushID, "cancel-local"], method: "POST")
+    }
+
     func deletePush(appID: String, pushID: String) async throws {
         try await sendVoid(path: ["v1", "apps", appID, "pushes", pushID, "delete"], method: "POST")
     }

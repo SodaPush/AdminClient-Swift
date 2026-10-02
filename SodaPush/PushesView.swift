@@ -42,7 +42,7 @@ struct PushesView: View {
             }
         }
         .sheet(isPresented: $showingComposer) { PushComposerView(app: app) { await load() } }
-        .sheet(item: $selectedPush) { push in PushJobDetailView(app: app, initialPush: push) }
+        .sheet(item: $selectedPush) { push in PushJobDetailView(app: app, initialPush: push) { await load() } }
         .refreshable { await load() }
         .toolbar {
             ToolbarItemGroup {
@@ -94,7 +94,24 @@ struct PushesView: View {
 }
 
 private extension PushJob {
-    var isTerminal: Bool { ["completed", "partial", "failed"].contains(status) }
+    var isTerminal: Bool { ["completed", "partial", "failed", "cancelled"].contains(status) }
+
+    var localSchedule: (identifier: String, fireAt: String)? {
+        guard pushType == .background,
+              let payload, case let .object(root) = payload,
+              case let .object(namespace)? = root["sodapush"],
+              case let .object(command)? = namespace["localNotification"],
+              case .string("schedule")? = command["action"],
+              case let .string(identifier)? = command["identifier"],
+              case let .string(fireAt)? = command["fireAt"] else { return nil }
+        return (identifier, fireAt)
+    }
+
+    var canCancelLocalSchedule: Bool {
+        guard localCancelledAt == nil, ["completed", "partial"].contains(status), successCount > 0,
+              let localSchedule, let fireDate = SodaDate.date(localSchedule.fireAt) else { return false }
+        return fireDate > Date()
+    }
 }
 
 private struct PushJobRow: View {
@@ -102,13 +119,13 @@ private struct PushJobRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: push.pushType == .background ? "arrow.triangle.2.circlepath" : "paperplane.fill")
+            Image(systemName: push.localSchedule != nil ? "clock.fill" : push.pushType == .background ? "arrow.triangle.2.circlepath" : "paperplane.fill")
                 .font(.title3)
                 .foregroundStyle(StatusBadge.color(for: push.status))
                 .frame(width: 30)
             VStack(alignment: .leading, spacing: 5) {
                 HStack {
-                    Text(push.pushType.rawValue.capitalized).font(.headline)
+                    Text(push.localSchedule != nil ? "Local Notification" : push.cancellationOf != nil ? "Local Cancellation" : push.pushType.rawValue.capitalized).font(.headline)
                     StatusBadge(text: push.environment.title, tint: StatusBadge.color(for: push.environment.rawValue))
                 }
                 Text(push.id).font(.caption.monospaced()).foregroundStyle(.secondary).lineLimit(1)
@@ -222,14 +239,14 @@ struct PushComposerView: View {
                     }
                 }
 
-                if (pushType == .alert && !customPayload && !deliveryMode.isLocalCommand) || deliveryMode == .localSchedule {
+                if (pushType == .alert && !customPayload && !deliveryMode.isLocalSchedule) || deliveryMode == .localSchedule {
                     Section("Notification") {
                         TextField("Title", text: $title)
                         TextField("Message", text: $message, axis: .vertical).lineLimit(3...8)
                     }
                 }
 
-                if !deliveryMode.isLocalCommand {
+                if !deliveryMode.isLocalSchedule {
                     Section("Payload") {
                         Toggle("Edit custom JSON", isOn: $customPayload)
                         if customPayload || pushType == .liveactivity {
@@ -263,7 +280,7 @@ struct PushComposerView: View {
             .task { await loadResources() }
             .onChange(of: pushType) { _, newValue in preparePayload(for: newValue) }
             .onChange(of: deliveryMode) { _, newValue in
-                if newValue.isLocalCommand {
+                if newValue.isLocalSchedule {
                     pushType = .background
                     customPayload = false
                 }
@@ -308,14 +325,13 @@ struct PushComposerView: View {
         if targetMode == .devices && selectedInstallationIDs.isEmpty { return false }
         if targetMode.usesValues && selectedTargetValues.isEmpty { return false }
         if deliveryMode == .serverScheduled && (scheduledDate <= Date() || scheduledDate.timeIntervalSinceNow > 86_400) { return false }
-        if deliveryMode.isLocalCommand {
+        if deliveryMode.isLocalSchedule {
             let identifierCount = localNotificationIdentifier.trimmingCharacters(in: .whitespacesAndNewlines).count
             if identifierCount == 0 || identifierCount > 128 { return false }
         }
         if deliveryMode == .localSchedule {
             return scheduledDate > Date() && !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
-        if deliveryMode == .localCancel { return true }
         if pushType == .alert && !customPayload { return !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
         if customPayload || pushType == .liveactivity { return !payloadText.isEmpty && payloadByteCount <= 4096 }
         return true
@@ -368,17 +384,15 @@ struct PushComposerView: View {
     }
 
     private func buildPayload() throws -> JSONValue {
-        if deliveryMode.isLocalCommand {
+        if deliveryMode.isLocalSchedule {
             var command: [String: JSONValue] = [
-                "action": .string(deliveryMode == .localSchedule ? "schedule" : "cancel"),
+                "action": .string("schedule"),
                 "identifier": .string(localNotificationIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)),
             ]
-            if deliveryMode == .localSchedule {
-                command["fireAt"] = .string(scheduledDate.ISO8601Format())
-                command["title"] = .string(title.trimmingCharacters(in: .whitespacesAndNewlines))
-                command["body"] = .string(message.trimmingCharacters(in: .whitespacesAndNewlines))
-                command["sound"] = .bool(true)
-            }
+            command["fireAt"] = .string(scheduledDate.ISO8601Format())
+            command["title"] = .string(title.trimmingCharacters(in: .whitespacesAndNewlines))
+            command["body"] = .string(message.trimmingCharacters(in: .whitespacesAndNewlines))
+            command["sound"] = .bool(true)
             return .object([
                 "aps": .object(["content-available": .number(1)]),
                 "sodapush": .object([
@@ -463,7 +477,7 @@ private struct PushDeliverySettingsView: View {
             if deliveryMode.usesDate {
                 DatePicker(deliveryMode.dateLabel, selection: $scheduledDate, in: allowedDates)
             }
-            if deliveryMode.isLocalCommand {
+            if deliveryMode.isLocalSchedule {
                 TextField("Local Notification ID", text: $localNotificationIdentifier)
                 Text("Sends a background control push for SodaPush SDK to process on each device. Background delivery is not guaranteed by Apple.")
                     .font(.caption)
@@ -501,7 +515,6 @@ private enum PushDeliveryMode: String, CaseIterable, Identifiable {
     case immediate
     case serverScheduled
     case localSchedule
-    case localCancel
 
     var id: Self { self }
     var title: String {
@@ -509,10 +522,9 @@ private enum PushDeliveryMode: String, CaseIterable, Identifiable {
         case .immediate: "Send Now"
         case .serverScheduled: "Server Scheduled"
         case .localSchedule: "Schedule on Device"
-        case .localCancel: "Cancel on Device"
         }
     }
-    var isLocalCommand: Bool { self == .localSchedule || self == .localCancel }
+    var isLocalSchedule: Bool { self == .localSchedule }
     var usesDate: Bool { self == .serverScheduled || self == .localSchedule }
     var dateLabel: String { self == .serverScheduled ? "Send At" : "Display At" }
 }
@@ -548,6 +560,7 @@ private struct PushJobDetailView: View {
     @EnvironmentObject private var store: AppStore
     let app: AppSummary
     let initialPush: PushJob
+    let onUpdated: () async -> Void
 
     @State private var detail: PushDetailResponse?
     @State private var errorMessage: String?
@@ -575,9 +588,24 @@ private struct PushJobDetailView: View {
                     if let scheduledAt = push.scheduledAt {
                         LabeledContent("Scheduled", value: SodaDate.formatted(scheduledAt))
                     }
+                    if let cancellationOf = push.cancellationOf {
+                        LabeledContent("Cancellation Of", value: cancellationOf)
+                    }
                     LabeledContent("Updated", value: SodaDate.formatted(push.updatedAt))
                     if let credentialID = push.credentialID {
                         LabeledContent("APNs Credential", value: credentialID)
+                    }
+                }
+                if let localSchedule = push.localSchedule {
+                    LocalNotificationSection(
+                        appID: app.id,
+                        push: push,
+                        identifier: localSchedule.identifier,
+                        fireAt: localSchedule.fireAt,
+                        canCancel: app.role.canSendPushes && app.disabledAt == nil
+                    ) {
+                        await load()
+                        await onUpdated()
                     }
                 }
                 Section("Audience") {
@@ -625,11 +653,58 @@ private struct PushJobDetailView: View {
 
     private func pollUntilComplete() async {
         await load()
-        while !["completed", "partial", "failed"].contains(push.status) && !Task.isCancelled {
+        while !push.isTerminal && !Task.isCancelled {
             try? await Task.sleep(for: .seconds(2))
             guard !Task.isCancelled else { return }
             await load()
         }
+    }
+}
+
+private struct LocalNotificationSection: View {
+    @EnvironmentObject private var store: AppStore
+    let appID: String
+    let push: PushJob
+    let identifier: String
+    let fireAt: String
+    let canCancel: Bool
+    let onUpdated: () async -> Void
+
+    @State private var isCancelling = false
+    @State private var errorMessage: String?
+
+    var body: some View {
+        Section("Local Notification") {
+            LabeledContent("Identifier", value: identifier)
+            LabeledContent("Display At", value: SodaDate.formatted(fireAt))
+            if let cancelledAt = push.localCancelledAt {
+                LabeledContent("Cancellation Requested", value: SodaDate.formatted(cancelledAt))
+                if let cancellationJobID = push.localCancellationJobID {
+                    LabeledContent("Cancellation Job", value: cancellationJobID)
+                }
+                Text("A cancellation command was queued for the devices that received this schedule. Background delivery is not guaranteed.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else if canCancel && push.canCancelLocalSchedule {
+                Button("Cancel Scheduled Notification", systemImage: "xmark.circle", role: .destructive) {
+                    Task { await cancel() }
+                }
+                .disabled(isCancelling)
+                if isCancelling { ProgressView("Sending cancellation…") }
+            }
+            if let errorMessage { InlineErrorView(message: errorMessage) }
+        }
+    }
+
+    private func cancel() async {
+        isCancelling = true
+        errorMessage = nil
+        defer { isCancelling = false }
+        do {
+            _ = try await store.cancelLocalPush(appID: appID, pushID: push.id)
+            await onUpdated()
+        } catch is CancellationError { return }
+        catch { errorMessage = error.localizedDescription }
     }
 }
 

@@ -8,11 +8,11 @@ import UIKit
 
 enum SodaDate {
     static func formatted(_ value: String?, dateOnly: Bool = false) -> String {
-        guard let value, let date = parsed(value) else { return "—" }
+        guard let value, let date = date(value) else { return "—" }
         return date.formatted(date: dateOnly ? .abbreviated : .abbreviated, time: dateOnly ? .omitted : .shortened)
     }
 
-    private static func parsed(_ value: String) -> Date? {
+    static func date(_ value: String) -> Date? {
         let fractional = ISO8601DateFormatter()
         fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return fractional.date(from: value) ?? ISO8601DateFormatter().date(from: value)
@@ -108,7 +108,7 @@ struct StatusBadge: View {
         switch status.lowercased() {
         case "active", "completed", "ready": .green
         case "queued", "running", "development": .blue
-        case "partial": .orange
+        case "partial", "cancelled": .orange
         case "failed", "invalid", "inactive", "disabled", "not_ready": .red
         case "production": .purple
         default: .secondary
