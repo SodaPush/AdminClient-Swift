@@ -232,6 +232,10 @@ final class AppStore: ObservableObject {
         try await authenticated { try await $0.cancelLocalPush(appID: appID, pushID: pushID) }
     }
 
+    func recallPush(appID: String, pushID: String) async throws -> RecallPushResponse {
+        try await authenticated { try await $0.recallPush(appID: appID, pushID: pushID) }
+    }
+
     func deletePush(appID: String, pushID: String) async throws {
         try await authenticated { try await $0.deletePush(appID: appID, pushID: pushID) }
     }

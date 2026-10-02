@@ -94,7 +94,12 @@ struct PushesView: View {
 }
 
 private extension PushJob {
-    var isTerminal: Bool { ["completed", "partial", "failed", "cancelled"].contains(status) }
+    var isTerminal: Bool { ["completed", "partial", "failed", "cancelled", "recalled"].contains(status) }
+
+    var canRecall: Bool {
+        guard pushType == .alert, recallIdentifier == id, recalledAt == nil else { return false }
+        return status == "queued" || (["completed", "partial"].contains(status) && successCount > 0)
+    }
 
     var localSchedule: (identifier: String, fireAt: String)? {
         guard pushType == .background,
@@ -125,7 +130,7 @@ private struct PushJobRow: View {
                 .frame(width: 30)
             VStack(alignment: .leading, spacing: 5) {
                 HStack {
-                    Text(push.localSchedule != nil ? "Local Notification" : push.cancellationOf != nil ? "Local Cancellation" : push.pushType.rawValue.capitalized).font(.headline)
+                    Text(push.localSchedule != nil ? "Local Notification" : push.cancellationOf != nil ? "Local Cancellation" : push.recallOf != nil ? "Recall Command" : push.pushType.rawValue.capitalized).font(.headline)
                     StatusBadge(text: push.environment.title, tint: StatusBadge.color(for: push.environment.rawValue))
                 }
                 Text(push.id).font(.caption.monospaced()).foregroundStyle(.secondary).lineLimit(1)
@@ -591,6 +596,9 @@ private struct PushJobDetailView: View {
                     if let cancellationOf = push.cancellationOf {
                         LabeledContent("Cancellation Of", value: cancellationOf)
                     }
+                    if let recallOf = push.recallOf {
+                        LabeledContent("Recall Of", value: recallOf)
+                    }
                     LabeledContent("Updated", value: SodaDate.formatted(push.updatedAt))
                     if let credentialID = push.credentialID {
                         LabeledContent("APNs Credential", value: credentialID)
@@ -603,6 +611,16 @@ private struct PushJobDetailView: View {
                         identifier: localSchedule.identifier,
                         fireAt: localSchedule.fireAt,
                         canCancel: app.role.canSendPushes && app.disabledAt == nil
+                    ) {
+                        await load()
+                        await onUpdated()
+                    }
+                }
+                if push.pushType == .alert {
+                    AlertRecallSection(
+                        appID: app.id,
+                        push: push,
+                        canSend: app.role.canSendPushes && app.disabledAt == nil
                     ) {
                         await load()
                         await onUpdated()
@@ -702,6 +720,67 @@ private struct LocalNotificationSection: View {
         defer { isCancelling = false }
         do {
             _ = try await store.cancelLocalPush(appID: appID, pushID: push.id)
+            await onUpdated()
+        } catch is CancellationError { return }
+        catch { errorMessage = error.localizedDescription }
+    }
+}
+
+private struct AlertRecallSection: View {
+    @EnvironmentObject private var store: AppStore
+    let appID: String
+    let push: PushJob
+    let canSend: Bool
+    let onUpdated: () async -> Void
+
+    @State private var isRecalling = false
+    @State private var errorMessage: String?
+
+    var body: some View {
+        Section("Recall") {
+            if let recalledAt = push.recalledAt {
+                LabeledContent("Recall Requested", value: SodaDate.formatted(recalledAt))
+                if let recallJobID = push.recallJobID {
+                    LabeledContent("Recall Job", value: recallJobID)
+                    Text("A background recall was queued for devices whose original APNs request succeeded. Removal from Notification Center is not guaranteed.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("This queued push was stopped before it was sent to APNs.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            } else if canSend && push.canRecall {
+                if push.status == "queued" {
+                    Button("Stop Queued Push", systemImage: "stop.circle", role: .destructive) {
+                        Task { await recall() }
+                    }
+                    .disabled(isRecalling)
+                } else {
+                    Button("Recall Notification", systemImage: "arrow.uturn.backward.circle", role: .destructive) {
+                        Task { await recall() }
+                    }
+                    .disabled(isRecalling)
+                    Text("The SDK can remove the notification from Notification Center if the background command reaches the device. It cannot undo an alert already seen or content saved inside the app.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                if isRecalling { ProgressView("Requesting recall…") }
+            } else if push.recallIdentifier == nil {
+                Text("This older push has no recall identifier and cannot be removed safely.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            if let errorMessage { InlineErrorView(message: errorMessage) }
+        }
+    }
+
+    private func recall() async {
+        isRecalling = true
+        errorMessage = nil
+        defer { isRecalling = false }
+        do {
+            _ = try await store.recallPush(appID: appID, pushID: push.id)
             await onUpdated()
         } catch is CancellationError { return }
         catch { errorMessage = error.localizedDescription }

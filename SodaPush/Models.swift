@@ -289,8 +289,12 @@ struct PushJob: nonisolated Codable, Identifiable, Equatable, Sendable {
     let payload: JSONValue?
     let scheduledAt: String?
     let cancellationOf: String?
+    let recallOf: String?
+    let recallIdentifier: String?
     let localCancelledAt: String?
     let localCancellationJobID: String?
+    let recalledAt: String?
+    let recallJobID: String?
     let status: String
     let totalCount: Int
     let successCount: Int
@@ -300,7 +304,7 @@ struct PushJob: nonisolated Codable, Identifiable, Equatable, Sendable {
     let updatedAt: String
 
     private enum CodingKeys: String, CodingKey {
-        case id, appID, environment, credentialID, pushType, target, payload, scheduledAt, cancellationOf, localCancelledAt, localCancellationJobID, status
+        case id, appID, environment, credentialID, pushType, target, payload, scheduledAt, cancellationOf, recallOf, recallIdentifier, localCancelledAt, localCancellationJobID, recalledAt, recallJobID, status
         case totalCount, successCount, failureCount, createdBy, createdAt, updatedAt
     }
 
@@ -315,8 +319,12 @@ struct PushJob: nonisolated Codable, Identifiable, Equatable, Sendable {
         payload = try container.decodeIfPresent(JSONValue.self, forKey: .payload)
         scheduledAt = try container.decodeIfPresent(String.self, forKey: .scheduledAt)
         cancellationOf = try container.decodeIfPresent(String.self, forKey: .cancellationOf)
+        recallOf = try container.decodeIfPresent(String.self, forKey: .recallOf)
+        recallIdentifier = try container.decodeIfPresent(String.self, forKey: .recallIdentifier)
         localCancelledAt = try container.decodeIfPresent(String.self, forKey: .localCancelledAt)
         localCancellationJobID = try container.decodeIfPresent(String.self, forKey: .localCancellationJobID)
+        recalledAt = try container.decodeIfPresent(String.self, forKey: .recalledAt)
+        recallJobID = try container.decodeIfPresent(String.self, forKey: .recallJobID)
         status = try container.decodeIfPresent(String.self, forKey: .status) ?? "unknown"
         totalCount = try container.decodeIfPresent(Int.self, forKey: .totalCount) ?? 0
         successCount = try container.decodeIfPresent(Int.self, forKey: .successCount) ?? 0
@@ -328,6 +336,13 @@ struct PushJob: nonisolated Codable, Identifiable, Equatable, Sendable {
 }
 
 struct PushesResponse: nonisolated Codable, Sendable { let pushes: [PushJob] }
+
+struct RecallPushResponse: nonisolated Codable, Sendable {
+    let originalJobID: String
+    let status: String
+    let recallJobID: String?
+    let recalledAt: String
+}
 
 struct Delivery: nonisolated Codable, Identifiable, Equatable, Sendable {
     let id: String

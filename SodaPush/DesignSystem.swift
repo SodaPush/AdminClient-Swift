@@ -108,7 +108,7 @@ struct StatusBadge: View {
         switch status.lowercased() {
         case "active", "completed", "ready": .green
         case "queued", "running", "development": .blue
-        case "partial", "cancelled": .orange
+        case "partial", "cancelled", "recalled": .orange
         case "failed", "invalid", "inactive", "disabled", "not_ready": .red
         case "production": .purple
         default: .secondary

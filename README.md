@@ -20,6 +20,7 @@ SodaPush Admin is the native SwiftUI console for an APNs backend you deploy in y
 - Inspect devices with language, locale, custom tags, business user ID, environment, version, and status.
 - Send alert, background, Live Activity, or custom JSON pushes immediately or through a Server-side schedule.
 - Send SDK control pushes that schedule a local notification on selected devices, then cancel it from the original push record.
+- Recall a new alert push from its original record: stop it if still queued, or request best-effort removal from Notification Center on devices whose original APNs request succeeded.
 - Target all devices or select from reported installations, tags, device languages, and business user IDs.
 - Select the APNs key per push, with automatic environment-specific defaults.
 - Inspect delivery results and delete completed push records.
